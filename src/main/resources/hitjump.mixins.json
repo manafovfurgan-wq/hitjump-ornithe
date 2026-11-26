@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.example.hitjump.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "MinecraftTickMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
