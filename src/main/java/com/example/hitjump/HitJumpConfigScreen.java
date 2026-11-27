@@ -5,8 +5,7 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import org.lwjgl.input.Keyboard;
 
 public class HitJumpConfigScreen extends Screen {
-    // Change this to whatever title you want at the top of the menu
-    private static final String MENU_TITLE = "HitJump & 1.8.9 PvP Fixes";
+    private static final String MENU_TITLE = "Tomato Cream";
 
     private static final int BTN_HITJUMP_TOGGLE = 0;
     private static final int BTN_HITJUMP_MODE = 1;
@@ -23,19 +22,24 @@ public class HitJumpConfigScreen extends Screen {
     private static final int BTN_HITDELAY_MINUS = 10;
     private static final int BTN_HITDELAY_PLUS = 11;
 
-    private static final int BTN_HEADFIX_TOGGLE = 12;
-    private static final int BTN_SMOOTHSNEAK_TOGGLE = 13;
-    private static final int BTN_PARALLAX_TOGGLE = 14;
+    private static final int BTN_GODPLACE_TOGGLE = 12;
+    private static final int BTN_GODPLACE_MINUS = 13;
+    private static final int BTN_GODPLACE_PLUS = 14;
 
-    private static final int BTN_KEYBIND = 15;
-    private static final int BTN_RESET = 16;
-    private static final int BTN_DONE = 17;
+    private static final int BTN_HEADFIX_TOGGLE = 15;
+    private static final int BTN_SMOOTHSNEAK_TOGGLE = 16;
+    private static final int BTN_PARALLAX_TOGGLE = 17;
+
+    private static final int BTN_KEYBIND = 18;
+    private static final int BTN_RESET = 19;
+    private static final int BTN_DONE = 20;
 
     private final Screen parent;
     private ButtonWidget hitJumpToggleButton;
     private ButtonWidget hitJumpModeButton;
     private ButtonWidget noJumpDelayToggleButton;
     private ButtonWidget noHitDelayToggleButton;
+    private ButtonWidget godPlaceToggleButton;
     private ButtonWidget headFixToggleButton;
     private ButtonWidget smoothSneakToggleButton;
     private ButtonWidget parallaxToggleButton;
@@ -57,7 +61,7 @@ public class HitJumpConfigScreen extends Screen {
         int centerX = this.width / 2;
         int leftX = centerX - 105;
         int rightX = centerX + 105;
-        int startY = Math.max(24, (this.height - 204) / 2);
+        int startY = Math.max(22, (this.height - 224) / 2);
 
         // Left column: HitJump + NoJumpDelay
         this.hitJumpToggleButton = new ButtonWidget(
@@ -93,7 +97,7 @@ public class HitJumpConfigScreen extends Screen {
         this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_MINUS, leftX - 100, startY + 124, 40, 20, "-1t"));
         this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_PLUS, leftX + 60, startY + 124, 40, 20, "+1t"));
 
-        // Right column: NoHitDelay + 1.7 Camera / Head / Eye Fixes
+        // Right column: NoHitDelay + GodPlace + 1.7 Camera / Head / Eye Fixes
         this.noHitDelayToggleButton = new ButtonWidget(
                 BTN_NOHITDELAY_TOGGLE,
                 rightX - 100, startY,
@@ -105,9 +109,20 @@ public class HitJumpConfigScreen extends Screen {
         this.buttons.add(new ButtonWidget(BTN_HITDELAY_MINUS, rightX - 100, startY + 24, 40, 20, "-1t"));
         this.buttons.add(new ButtonWidget(BTN_HITDELAY_PLUS, rightX + 60, startY + 24, 40, 20, "+1t"));
 
+        this.godPlaceToggleButton = new ButtonWidget(
+                BTN_GODPLACE_TOGGLE,
+                rightX - 100, startY + 52,
+                200, 20,
+                getGodPlaceLabel(config)
+        );
+        this.buttons.add(this.godPlaceToggleButton);
+
+        this.buttons.add(new ButtonWidget(BTN_GODPLACE_MINUS, rightX - 100, startY + 76, 40, 20, "-1t"));
+        this.buttons.add(new ButtonWidget(BTN_GODPLACE_PLUS, rightX + 60, startY + 76, 40, 20, "+1t"));
+
         this.headFixToggleButton = new ButtonWidget(
                 BTN_HEADFIX_TOGGLE,
-                rightX - 100, startY + 56,
+                rightX - 100, startY + 104,
                 200, 20,
                 getHeadFixLabel(config)
         );
@@ -115,7 +130,7 @@ public class HitJumpConfigScreen extends Screen {
 
         this.smoothSneakToggleButton = new ButtonWidget(
                 BTN_SMOOTHSNEAK_TOGGLE,
-                rightX - 100, startY + 80,
+                rightX - 100, startY + 128,
                 200, 20,
                 getSmoothSneakLabel(config)
         );
@@ -123,7 +138,7 @@ public class HitJumpConfigScreen extends Screen {
 
         this.parallaxToggleButton = new ButtonWidget(
                 BTN_PARALLAX_TOGGLE,
-                rightX - 100, startY + 104,
+                rightX - 100, startY + 152,
                 200, 20,
                 getParallaxLabel(config)
         );
@@ -132,14 +147,14 @@ public class HitJumpConfigScreen extends Screen {
         // Bottom centered: Keybind, Reset, Save & Done
         this.keybindButton = new ButtonWidget(
                 BTN_KEYBIND,
-                centerX - 100, startY + 154,
+                centerX - 100, startY + 180,
                 200, 20,
                 getKeybindLabel(config)
         );
         this.buttons.add(this.keybindButton);
 
-        this.buttons.add(new ButtonWidget(BTN_RESET, centerX - 100, startY + 178, 95, 20, "Reset"));
-        this.buttons.add(new ButtonWidget(BTN_DONE, centerX + 5, startY + 178, 95, 20, "Save & Done"));
+        this.buttons.add(new ButtonWidget(BTN_RESET, centerX - 100, startY + 204, 95, 20, "Reset"));
+        this.buttons.add(new ButtonWidget(BTN_DONE, centerX + 5, startY + 204, 95, 20, "Save & Done"));
     }
 
     @Override
@@ -196,6 +211,16 @@ public class HitJumpConfigScreen extends Screen {
             case BTN_HITDELAY_PLUS:
                 config.hitDelayTicks = Math.min(10, config.hitDelayTicks + 1);
                 break;
+            case BTN_GODPLACE_TOGGLE:
+                config.godPlaceEnabled = !config.godPlaceEnabled;
+                this.godPlaceToggleButton.message = getGodPlaceLabel(config);
+                break;
+            case BTN_GODPLACE_MINUS:
+                config.godPlaceDelayTicks = Math.max(0, config.godPlaceDelayTicks - 1);
+                break;
+            case BTN_GODPLACE_PLUS:
+                config.godPlaceDelayTicks = Math.min(3, config.godPlaceDelayTicks + 1);
+                break;
             case BTN_HEADFIX_TOGGLE:
                 config.headFixEnabled = !config.headFixEnabled;
                 this.headFixToggleButton.message = getHeadFixLabel(config);
@@ -227,6 +252,7 @@ public class HitJumpConfigScreen extends Screen {
                 this.hitJumpModeButton.message = getHitJumpModeLabel(config);
                 this.noJumpDelayToggleButton.message = getNoJumpDelayLabel(config);
                 this.noHitDelayToggleButton.message = getNoHitDelayLabel(config);
+                this.godPlaceToggleButton.message = getGodPlaceLabel(config);
                 this.headFixToggleButton.message = getHeadFixLabel(config);
                 this.smoothSneakToggleButton.message = getSmoothSneakLabel(config);
                 this.parallaxToggleButton.message = getParallaxLabel(config);
@@ -272,9 +298,9 @@ public class HitJumpConfigScreen extends Screen {
         int centerX = this.width / 2;
         int leftX = centerX - 105;
         int rightX = centerX + 105;
-        int startY = Math.max(24, (this.height - 204) / 2);
+        int startY = Math.max(22, (this.height - 224) / 2);
 
-        this.drawCenteredString(this.textRenderer, MENU_TITLE, centerX, startY - 16, 0xFFFFFF);
+        this.drawCenteredString(this.textRenderer, MENU_TITLE, centerX, startY - 15, 0xFFFFFF);
 
         // Left column labels
         this.drawCenteredString(
@@ -305,6 +331,13 @@ public class HitJumpConfigScreen extends Screen {
                 rightX, startY + 30, 0xE0E0E0
         );
 
+        int placeDelayMs = config.godPlaceDelayTicks * 50;
+        this.drawCenteredString(
+                this.textRenderer,
+                "Place: " + config.godPlaceDelayTicks + "t (" + placeDelayMs + " ms)",
+                rightX, startY + 82, 0xE0E0E0
+        );
+
         super.render(mouseX, mouseY, tickDelta);
     }
 
@@ -327,6 +360,10 @@ public class HitJumpConfigScreen extends Screen {
 
     private String getNoHitDelayLabel(HitJumpConfig config) {
         return "NoHitDelay: " + (config.noHitDelayEnabled ? "ON" : "OFF");
+    }
+
+    private String getGodPlaceLabel(HitJumpConfig config) {
+        return "GodPlace: " + (config.godPlaceEnabled ? "ON" : "OFF");
     }
 
     private String getHeadFixLabel(HitJumpConfig config) {
