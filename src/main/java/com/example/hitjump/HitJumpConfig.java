@@ -37,9 +37,10 @@ public class HitJumpConfig {
     public boolean noHitDelayEnabled = true;
     public int hitDelayTicks = 0;
 
-    // GodPlace (FastPlace) settings
-    public boolean godPlaceEnabled = false;
+    // GodPlace (dedicated hold-to-fast-place keybind; -98 = Middle Mouse / Button 3)
+    public boolean godPlaceEnabled = true;
     public int godPlaceDelayTicks = 0;
+    public int godPlaceKeyCode = -98;
 
     // 1.7 Camera / Head / Eye fixes
     public boolean headFixEnabled = true;
@@ -92,8 +93,9 @@ public class HitJumpConfig {
         this.jumpDelayTicks = 0;
         this.noHitDelayEnabled = true;
         this.hitDelayTicks = 0;
-        this.godPlaceEnabled = false;
+        this.godPlaceEnabled = true;
         this.godPlaceDelayTicks = 0;
+        this.godPlaceKeyCode = -98;
         this.headFixEnabled = true;
         this.smoothSneakEnabled = true;
         this.parallaxFixEnabled = true;
@@ -111,6 +113,11 @@ public class HitJumpConfig {
         if (hitDelayTicks > 10) hitDelayTicks = 10;
         if (godPlaceDelayTicks < 0) godPlaceDelayTicks = 0;
         if (godPlaceDelayTicks > 3) godPlaceDelayTicks = 3;
+        boolean validGodPlaceMouse = (godPlaceKeyCode >= -100 && godPlaceKeyCode <= -85);
+        boolean validGodPlaceKey = (godPlaceKeyCode > 0 && godPlaceKeyCode < 256);
+        if (!validGodPlaceMouse && !validGodPlaceKey) {
+            godPlaceKeyCode = -98;
+        }
         if (menuKeyCode <= 0 || menuKeyCode >= 256) menuKeyCode = Keyboard.KEY_H;
     }
 }
