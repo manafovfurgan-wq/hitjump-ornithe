@@ -10,8 +10,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Minecraft.class)
 public class MinecraftTickMixin {
     @Inject(method = "tick", at = @At("HEAD"))
-    private void hitjump$onTick(CallbackInfo ci) {
+    private void hitjump$onTickHead(CallbackInfo ci) {
         HitJumpMod.onClientTick((Minecraft) (Object) this);
+    }
+
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void hitjump$onTickTail(CallbackInfo ci) {
+        HitJumpMod.onClientTickEnd((Minecraft) (Object) this);
     }
 
     @Inject(method = "doAttack", at = @At("HEAD"), require = 0)
