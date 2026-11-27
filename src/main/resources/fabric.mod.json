@@ -3,8 +3,9 @@
   "id": "hitjump",
   "version": "${version}",
   "name": "Tomato Cream",
-  "description": "1.8.9 PvP & QoL tweaks",
+  "description": "Private 1.8.9 PvP & QoL suite: HitJump, Delay Fixes, GodPlace, Visuals, 1.7 Animations, and Sound Mixer.",
   "authors": ["Thewier"],
+  "icon": "assets/hitjump/icon.png",
   "license": "MIT",
   "environment": "client",
   "entrypoints": {
