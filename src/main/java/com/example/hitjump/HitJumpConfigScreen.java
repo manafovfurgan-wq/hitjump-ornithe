@@ -6,23 +6,30 @@ import org.lwjgl.input.Keyboard;
 
 public class HitJumpConfigScreen extends Screen {
     // Change this to whatever title you want at the top of the menu
-    private static final String MENU_TITLE = "HitJump & NoJumpDelay";
+    private static final String MENU_TITLE = "HitJump & Delay Fixes";
 
     private static final int BTN_HITJUMP_TOGGLE = 0;
     private static final int BTN_FREQ_MINUS = 1;
     private static final int BTN_FREQ_PLUS = 2;
     private static final int BTN_LATENCY_MINUS = 3;
     private static final int BTN_LATENCY_PLUS = 4;
+
     private static final int BTN_NOJUMPDELAY_TOGGLE = 5;
     private static final int BTN_JUMPDELAY_MINUS = 6;
     private static final int BTN_JUMPDELAY_PLUS = 7;
-    private static final int BTN_KEYBIND = 8;
-    private static final int BTN_RESET = 9;
-    private static final int BTN_DONE = 10;
+
+    private static final int BTN_NOHITDELAY_TOGGLE = 8;
+    private static final int BTN_HITDELAY_MINUS = 9;
+    private static final int BTN_HITDELAY_PLUS = 10;
+
+    private static final int BTN_KEYBIND = 11;
+    private static final int BTN_RESET = 12;
+    private static final int BTN_DONE = 13;
 
     private final Screen parent;
     private ButtonWidget hitJumpToggleButton;
     private ButtonWidget noJumpDelayToggleButton;
+    private ButtonWidget noHitDelayToggleButton;
     private ButtonWidget keybindButton;
 
     private boolean waitingForKey = false;
@@ -39,46 +46,59 @@ public class HitJumpConfigScreen extends Screen {
         HitJumpConfig config = HitJumpConfig.getInstance();
 
         int centerX = this.width / 2;
-        int startY = Math.max(28, (this.height - 176) / 2);
+        int leftX = centerX - 105;
+        int rightX = centerX + 105;
+        int startY = Math.max(28, (this.height - 160) / 2);
 
-        // HitJump controls
+        // Left column: HitJump
         this.hitJumpToggleButton = new ButtonWidget(
                 BTN_HITJUMP_TOGGLE,
-                centerX - 100, startY,
+                leftX - 100, startY,
                 200, 20,
                 getHitJumpLabel(config)
         );
         this.buttons.add(this.hitJumpToggleButton);
 
-        this.buttons.add(new ButtonWidget(BTN_FREQ_MINUS, centerX - 100, startY + 24, 40, 20, "-5%"));
-        this.buttons.add(new ButtonWidget(BTN_FREQ_PLUS, centerX + 60, startY + 24, 40, 20, "+5%"));
+        this.buttons.add(new ButtonWidget(BTN_FREQ_MINUS, leftX - 100, startY + 26, 40, 20, "-5%"));
+        this.buttons.add(new ButtonWidget(BTN_FREQ_PLUS, leftX + 60, startY + 26, 40, 20, "+5%"));
 
-        this.buttons.add(new ButtonWidget(BTN_LATENCY_MINUS, centerX - 100, startY + 48, 40, 20, "-1t"));
-        this.buttons.add(new ButtonWidget(BTN_LATENCY_PLUS, centerX + 60, startY + 48, 40, 20, "+1t"));
+        this.buttons.add(new ButtonWidget(BTN_LATENCY_MINUS, leftX - 100, startY + 52, 40, 20, "-1t"));
+        this.buttons.add(new ButtonWidget(BTN_LATENCY_PLUS, leftX + 60, startY + 52, 40, 20, "+1t"));
 
-        // NoJumpDelay controls
+        // Right column: NoJumpDelay & NoHitDelay
         this.noJumpDelayToggleButton = new ButtonWidget(
                 BTN_NOJUMPDELAY_TOGGLE,
-                centerX - 100, startY + 78,
+                rightX - 100, startY,
                 200, 20,
                 getNoJumpDelayLabel(config)
         );
         this.buttons.add(this.noJumpDelayToggleButton);
 
-        this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_MINUS, centerX - 100, startY + 102, 40, 20, "-1t"));
-        this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_PLUS, centerX + 60, startY + 102, 40, 20, "+1t"));
+        this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_MINUS, rightX - 100, startY + 26, 40, 20, "-1t"));
+        this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_PLUS, rightX + 60, startY + 26, 40, 20, "+1t"));
 
-        // Keybind, Reset, Save
+        this.noHitDelayToggleButton = new ButtonWidget(
+                BTN_NOHITDELAY_TOGGLE,
+                rightX - 100, startY + 56,
+                200, 20,
+                getNoHitDelayLabel(config)
+        );
+        this.buttons.add(this.noHitDelayToggleButton);
+
+        this.buttons.add(new ButtonWidget(BTN_HITDELAY_MINUS, rightX - 100, startY + 82, 40, 20, "-1t"));
+        this.buttons.add(new ButtonWidget(BTN_HITDELAY_PLUS, rightX + 60, startY + 82, 40, 20, "+1t"));
+
+        // Bottom centered: Keybind, Reset, Save & Done
         this.keybindButton = new ButtonWidget(
                 BTN_KEYBIND,
-                centerX - 100, startY + 132,
+                centerX - 100, startY + 114,
                 200, 20,
                 getKeybindLabel(config)
         );
         this.buttons.add(this.keybindButton);
 
-        this.buttons.add(new ButtonWidget(BTN_RESET, centerX - 100, startY + 156, 95, 20, "Reset"));
-        this.buttons.add(new ButtonWidget(BTN_DONE, centerX + 5, startY + 156, 95, 20, "Save & Done"));
+        this.buttons.add(new ButtonWidget(BTN_RESET, centerX - 100, startY + 140, 95, 20, "Reset"));
+        this.buttons.add(new ButtonWidget(BTN_DONE, centerX + 5, startY + 140, 95, 20, "Save & Done"));
     }
 
     @Override
@@ -121,6 +141,16 @@ public class HitJumpConfigScreen extends Screen {
             case BTN_JUMPDELAY_PLUS:
                 config.jumpDelayTicks = Math.min(10, config.jumpDelayTicks + 1);
                 break;
+            case BTN_NOHITDELAY_TOGGLE:
+                config.noHitDelayEnabled = !config.noHitDelayEnabled;
+                this.noHitDelayToggleButton.message = getNoHitDelayLabel(config);
+                break;
+            case BTN_HITDELAY_MINUS:
+                config.hitDelayTicks = Math.max(0, config.hitDelayTicks - 1);
+                break;
+            case BTN_HITDELAY_PLUS:
+                config.hitDelayTicks = Math.min(10, config.hitDelayTicks + 1);
+                break;
             case BTN_KEYBIND:
                 this.waitingForKey = !this.waitingForKey;
                 if (this.waitingForKey) {
@@ -138,6 +168,7 @@ public class HitJumpConfigScreen extends Screen {
                 config.resetDefaults();
                 this.hitJumpToggleButton.message = getHitJumpLabel(config);
                 this.noJumpDelayToggleButton.message = getNoJumpDelayLabel(config);
+                this.noHitDelayToggleButton.message = getNoHitDelayLabel(config);
                 this.keybindButton.message = getKeybindLabel(config);
                 break;
             case BTN_DONE:
@@ -178,28 +209,39 @@ public class HitJumpConfigScreen extends Screen {
         this.renderBackground();
 
         int centerX = this.width / 2;
-        int startY = Math.max(28, (this.height - 176) / 2);
+        int leftX = centerX - 105;
+        int rightX = centerX + 105;
+        int startY = Math.max(28, (this.height - 160) / 2);
 
-        this.drawCenteredString(this.textRenderer, MENU_TITLE, centerX, startY - 18, 0xFFFFFF);
+        this.drawCenteredString(this.textRenderer, MENU_TITLE, centerX, startY - 20, 0xFFFFFF);
 
+        // Left column labels
         this.drawCenteredString(
                 this.textRenderer,
                 "Frequency: " + config.jumpFrequency + "%",
-                centerX, startY + 30, 0xE0E0E0
+                leftX, startY + 32, 0xE0E0E0
         );
 
         int latencyMs = config.latencyTicks * 50;
         this.drawCenteredString(
                 this.textRenderer,
                 "Latency: " + config.latencyTicks + "t (" + latencyMs + " ms)",
-                centerX, startY + 54, 0xE0E0E0
+                leftX, startY + 58, 0xE0E0E0
         );
 
+        // Right column labels
         int jumpDelayMs = config.jumpDelayTicks * 50;
         this.drawCenteredString(
                 this.textRenderer,
-                "Jump Delay: " + config.jumpDelayTicks + "t (" + jumpDelayMs + " ms)",
-                centerX, startY + 108, 0xE0E0E0
+                "Jump: " + config.jumpDelayTicks + "t (" + jumpDelayMs + " ms)",
+                rightX, startY + 32, 0xE0E0E0
+        );
+
+        int hitDelayMs = config.hitDelayTicks * 50;
+        this.drawCenteredString(
+                this.textRenderer,
+                "Hit: " + config.hitDelayTicks + "t (" + hitDelayMs + " ms)",
+                rightX, startY + 88, 0xE0E0E0
         );
 
         super.render(mouseX, mouseY, tickDelta);
@@ -216,6 +258,10 @@ public class HitJumpConfigScreen extends Screen {
 
     private String getNoJumpDelayLabel(HitJumpConfig config) {
         return "NoJumpDelay: " + (config.noJumpDelayEnabled ? "ON" : "OFF");
+    }
+
+    private String getNoHitDelayLabel(HitJumpConfig config) {
+        return "NoHitDelay: " + (config.noHitDelayEnabled ? "ON" : "OFF");
     }
 
     private String getKeybindLabel(HitJumpConfig config) {
