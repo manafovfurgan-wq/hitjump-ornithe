@@ -8,43 +8,40 @@ import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.FloatBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 
 public class HitJumpMod implements ClientModInitializer {
     private static final Random RANDOM = new Random();
+    private static final long DOUBLE_TAP_WINDOW_MS = 380L;
     private static Minecraft cachedClient = null;
 
-    // Captured 3D camera matrices for through-wall ESP / nametag rendering
-    private static final FloatBuffer PROJECTION_MATRIX = ByteBuffer.allocateDirect(16 * 4)
-            .order(ByteOrder.nativeOrder()).asFloatBuffer();
-    private static final FloatBuffer MODELVIEW_MATRIX = ByteBuffer.allocateDirect(16 * 4)
-            .order(ByteOrder.nativeOrder()).asFloatBuffer();
-    private static boolean cameraCapturedThisFrame = false;
+    // Menu trigger state
+    private static boolean wasMenuKeyDown = false;
+    private static long lastMenuKeyTapMs = 0L;
 
     // HitJump state
     private static int lastHurtTime = 0;
     private static int pendingJumpTicks = -1;
     private static int recentCombatHurtWindow = 0;
     private static boolean wasOnGround = true;
-    private static boolean wasMenuKeyDown = false;
+
+    // Toggle Sprint state
+    private static boolean wasSprintToggleKeyDown = false;
+    private static boolean toggleSprintForcingKey = false;
 
     // GodPlace state
     private static boolean godPlaceForcingUseKey = false;
+
+    // 1.7 Blockhit animation cooldown
+    private static int blockhitSwingCooldown = 0;
 
     // 1.7 Smooth Sneak state
     private static float smoothEyeHeight = -1.0F;
     private static long lastCameraTimeNanos = 0L;
 
-    // Cached reflective fields
+    // Cached reflective fields (package-private where shared with WorldVisualsRenderer)
     private static Field hurtTimeField = null;
     private static boolean hurtTimeSearched = false;
 
@@ -60,81 +57,72 @@ public class HitJumpMod implements ClientModInitializer {
     private static boolean keyBindingsSearched = false;
     private static Object useKeyBindingObj = null;
     private static Object pickKeyBindingObj = null;
+    private static Object sprintKeyBindingObj = null;
     private static Field keyBindingKeyCodeField = null;
     private static Field keyBindingPressedField = null;
     private static Field keyBindingPressTimeField = null;
 
-    private static boolean entityMotionSearched = false;
-    private static Field entityPrevXField = null;
-    private static Field entityPrevYField = null;
-    private static Field entityPrevZField = null;
-    private static Field entityXField = null;
-    private static Field entityYField = null;
-    private static Field entityZField = null;
-    private static Field entityVelYField = null;
-    private static Field entityYawField = null;
-    private static Field entityPitchField = null;
-    private static Field entityPrevYawField = null;
-    private static Field entityPrevPitchField = null;
-    private static Field entityBoxField = null;
-    private static Field entityDeadField = null;
-    private static Field entityLastTickXField = null;
-    private static Field entityLastTickYField = null;
-    private static Field entityLastTickZField = null;
-
-    private static boolean boxFieldsSearched = false;
-    private static Field boxMinXField = null;
-    private static Field boxMinYField = null;
-    private static Field boxMinZField = null;
-    private static Field boxMaxXField = null;
-    private static Field boxMaxYField = null;
-    private static Field boxMaxZField = null;
-
-    private static boolean nameAccessSearched = false;
-    private static Field dataWatcherField = null;
-    private static Method dataWatcherGetStringMethod = null;
-    private static Field gameProfileField = null;
-    private static Method gameProfileGetNameMethod = null;
-    private static Method entityGetDisplayNameMethod = null;
-    private static Method textFormattedMethod = null;
-    private static boolean textFormattedSearched = false;
-
-    private static boolean textRendererSearched = false;
-    private static Object textRendererObj = null;
-    private static Method textGetWidthMethod = null;
-    private static Method textDrawShadowMethod = null;
+    static boolean entityMotionSearched = false;
+    static Field entityPrevXField = null;
+    static Field entityPrevYField = null;
+    static Field entityPrevZField = null;
+    static Field entityXField = null;
+    static Field entityYField = null;
+    static Field entityZField = null;
+    static Field entityVelXField = null;
+    static Field entityVelYField = null;
+    static Field entityVelZField = null;
+    static Field entityYawField = null;
+    static Field entityPitchField = null;
+    static Field entityPrevYawField = null;
+    static Field entityPrevPitchField = null;
+    static Field entityBoxField = null;
+    static Field entityCollidedHorizField = null;
+    static Field entityInWebField = null;
+    static Field entityDeadField = null;
+    static Field entityLastTickXField = null;
+    static Field entityLastTickYField = null;
+    static Field entityLastTickZField = null;
 
     private static boolean headYawSearched = false;
     private static Field headYawField = null;
     private static Field prevHeadYawField = null;
 
-    private static boolean inputSneakSearched = false;
+    private static boolean swingFieldsSearched = false;
+    private static Field swingInProgressField = null;
+    private static Field swingProgressIntField = null;
+
+    private static boolean inputFieldsSearched = false;
     private static Field playerInputField = null;
+    private static Field inputStrafeField = null;
+    private static Field inputForwardField = null;
     private static Field inputSneakField = null;
+
+    private static boolean itemRendererSearched = false;
+    private static Object itemInHandRendererObj = null;
+    private static Field equippedProgressField = null;
+    private static Field prevEquippedProgressField = null;
+
+    private static boolean guiContainerSearched = false;
+    private static Class<?> guiContainerClass = null;
+    private static Field guiXSizeField = null;
+    private static Field guiLeftField = null;
 
     private static boolean perspectiveSearched = false;
     private static Field optionsObjectField = null;
     private static Field thirdPersonViewField = null;
 
-    private static class TagRenderEntry {
-        final String label;
-        final double relX;
-        final double relY;
-        final double relZ;
-        final double distSq;
-
-        TagRenderEntry(String label, double relX, double relY, double relZ, double distSq) {
-            this.label = label;
-            this.relX = relX;
-            this.relY = relY;
-            this.relZ = relZ;
-            this.distSq = distSq;
-        }
-    }
-
     @Override
     public void onInitializeClient() {
         HitJumpConfig.load();
+    }
+
+    public static Minecraft getCachedClient() {
+        return cachedClient;
+    }
+
+    public static int getTextWidth(String text) {
+        return WorldVisualsRenderer.getTextWidth(text);
     }
 
     public static void onClientTick(Minecraft client) {
@@ -145,15 +133,20 @@ public class HitJumpMod implements ClientModInitializer {
 
         HitJumpConfig config = HitJumpConfig.getInstance();
 
-        // Open settings menu using the configured keybind
-        boolean isMenuKeyDown = isKeyDownSafe(config.menuKeyCode);
-        if (isMenuKeyDown && !wasMenuKeyDown && client.screen == null && client.player != null) {
-            client.openScreen(new HitJumpConfigScreen(null));
+        // Sound Mixer runs every tick even in menus
+        SoundMixer.processActiveSounds(client);
+
+        // Center Inventory (No Potion Shift)
+        if (config.centerInventoryEnabled && client.screen != null) {
+            centerContainerScreen(client.screen);
         }
-        wasMenuKeyDown = isMenuKeyDown;
+
+        // Anti-Accidental Menu Trigger (Double-Tap, Modifier + Key, or Single Press)
+        handleMenuTrigger(client, config);
 
         if (client.player == null || client.world == null) {
             releaseForcedUseKey(true);
+            releaseForcedSprintKey(true);
             lastHurtTime = 0;
             pendingJumpTicks = -1;
             recentCombatHurtWindow = 0;
@@ -162,20 +155,30 @@ public class HitJumpMod implements ClientModInitializer {
             return;
         }
 
+        // Toggle Sprint + Dedicated Hotkey
+        handleToggleSprint(client, config);
+
         // 1.7 Head Position fix (MC-67665)
         if (config.headFixEnabled) {
             syncHeadYawInternal(client);
         }
 
-        // GodPlace: ONLY active while the dedicated GodPlace keybind (default: Middle Mouse) is held.
-        // Regular Right Click (Mouse Button 2) stays 100% vanilla.
+        // No Item-Swap Dip & 1.7 Blockhit Animation
+        applyHeldItemAnimations(client, config);
+
+        // NoSlow (Cobwebs & Item Use pre-movement)
+        if (config.noSlowEnabled) {
+            applyNoSlowHead(client, config);
+        }
+
+        // GodPlace: ONLY active while dedicated keybind (default: Middle Mouse) is held
         boolean godPlaceActive = config.godPlaceEnabled
                 && client.screen == null
                 && isBindDown(config.godPlaceKeyCode);
 
         if (godPlaceActive) {
             ensureKeyBindingFields(client);
-            setUseKeyPressed(true);
+            setKeyBindingPressed(useKeyBindingObj, true);
             godPlaceForcingUseKey = true;
             if (config.godPlaceDelayTicks == 0) {
                 applyGodPlace(client, 0);
@@ -213,10 +216,8 @@ public class HitJumpMod implements ClientModInitializer {
                 triggerHitJumpIfValid(client, config);
                 recentCombatHurtWindow = 0;
             } else if (wasOnGround && client.player.onGround) {
-                // Allow a 2-tick grace window in case server velocity packet arrives 1 tick after hurt packet
                 recentCombatHurtWindow = 2;
             } else {
-                // Player just landed from a fall -> ignore fall damage
                 recentCombatHurtWindow = 0;
             }
         } else if (recentCombatHurtWindow > 0) {
@@ -240,16 +241,382 @@ public class HitJumpMod implements ClientModInitializer {
     }
 
     public static void onClientTickEnd(Minecraft client) {
-        if (client == null || client.player == null) {
+        if (client == null) {
             return;
         }
         HitJumpConfig config = HitJumpConfig.getInstance();
+
+        SoundMixer.processActiveSounds(client);
+
+        if (config.centerInventoryEnabled && client.screen != null) {
+            centerContainerScreen(client.screen);
+        }
+
+        if (client.player == null) {
+            return;
+        }
+
         if (config.godPlaceEnabled && client.screen == null && isBindDown(config.godPlaceKeyCode)) {
             applyGodPlace(client, config.godPlaceDelayTicks);
             clearPickKeyPressTimeIfShared(client, config.godPlaceKeyCode);
         }
+        if (config.noSlowEnabled) {
+            applyNoSlowTail(client, config);
+        }
+        if (config.noSwapDipEnabled) {
+            lockEquippedItemProgress(client);
+        }
         if (config.headFixEnabled) {
             syncHeadYawInternal(client);
+        }
+    }
+
+    private static void handleMenuTrigger(Minecraft client, HitJumpConfig config) {
+        boolean isMenuKeyDown = isKeyDownSafe(config.menuKeyCode);
+        if (isMenuKeyDown && !wasMenuKeyDown && client.screen == null && client.player != null) {
+            if (config.menuTriggerMode == 0) {
+                // Double-Tap mode
+                long now = System.currentTimeMillis();
+                if (lastMenuKeyTapMs > 0L && (now - lastMenuKeyTapMs) <= DOUBLE_TAP_WINDOW_MS) {
+                    lastMenuKeyTapMs = 0L;
+                    client.openScreen(new HitJumpConfigScreen(null));
+                } else {
+                    lastMenuKeyTapMs = now;
+                }
+            } else if (config.menuTriggerMode == 1) {
+                // Modifier + Key mode
+                if (isModifierDown(config.menuModifierKey)) {
+                    client.openScreen(new HitJumpConfigScreen(null));
+                }
+            } else {
+                // Single Press mode
+                client.openScreen(new HitJumpConfigScreen(null));
+            }
+        }
+        if (client.screen != null) {
+            lastMenuKeyTapMs = 0L;
+        }
+        wasMenuKeyDown = isMenuKeyDown;
+    }
+
+    private static boolean isModifierDown(int modifierKey) {
+        if (isKeyDownSafe(modifierKey)) {
+            return true;
+        }
+        if (modifierKey == Keyboard.KEY_LCONTROL) return isKeyDownSafe(Keyboard.KEY_RCONTROL);
+        if (modifierKey == Keyboard.KEY_RCONTROL) return isKeyDownSafe(Keyboard.KEY_LCONTROL);
+        if (modifierKey == Keyboard.KEY_LSHIFT) return isKeyDownSafe(Keyboard.KEY_RSHIFT);
+        if (modifierKey == Keyboard.KEY_RSHIFT) return isKeyDownSafe(Keyboard.KEY_LSHIFT);
+        if (modifierKey == Keyboard.KEY_LMENU) return isKeyDownSafe(Keyboard.KEY_RMENU);
+        if (modifierKey == Keyboard.KEY_RMENU) return isKeyDownSafe(Keyboard.KEY_LMENU);
+        return false;
+    }
+
+    private static void handleToggleSprint(Minecraft client, HitJumpConfig config) {
+        if (!config.toggleSprintEnabled) {
+            wasSprintToggleKeyDown = false;
+            releaseForcedSprintKey(false);
+            return;
+        }
+
+        boolean hotkeyDown = (client.screen == null) && isBindDown(config.toggleSprintKeyCode);
+        if (hotkeyDown && !wasSprintToggleKeyDown) {
+            config.toggleSprintActive = !config.toggleSprintActive;
+            HitJumpConfig.save();
+        }
+        wasSprintToggleKeyDown = hotkeyDown;
+
+        if (config.toggleSprintActive && client.screen == null) {
+            ensureKeyBindingFields(client);
+            setKeyBindingPressed(sprintKeyBindingObj, true);
+            toggleSprintForcingKey = true;
+        } else if (toggleSprintForcingKey) {
+            releaseForcedSprintKey(client.screen != null);
+        }
+    }
+
+    private static void applyNoSlowHead(Minecraft client, HitJumpConfig config) {
+        Object player = client.player;
+        ensureEntityMotionFields(player);
+
+        // Cobwebs: clear Entity.isInWeb before moveEntity() reads it
+        if (config.noSlowCobwebs && entityInWebField != null) {
+            try {
+                if (entityInWebField.getBoolean(player)) {
+                    entityInWebField.setBoolean(player, false);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // Item Use (eating, drinking, bow draw, sword blocking): restore the 80% movement loss
+        if (config.noSlowItems && client.screen == null && !isPlayerSneaking(player)) {
+            float forward = getInputForward(player);
+            float strafe = getInputStrafe(player);
+            boolean slowedByItem = (Math.abs(forward) > 0.01F && Math.abs(forward) <= 0.25F)
+                    || (Math.abs(strafe) > 0.01F && Math.abs(strafe) <= 0.25F);
+
+            if (slowedByItem && entityVelXField != null && entityVelZField != null && entityYawField != null) {
+                try {
+                    float normF = (Math.abs(forward) > 0.01F) ? Math.signum(forward) : 0.0F;
+                    float normS = (Math.abs(strafe) > 0.01F) ? Math.signum(strafe) : 0.0F;
+                    float len = (float) Math.sqrt(normF * normF + normS * normS);
+                    if (len > 0.001F) {
+                        normF /= len;
+                        normS /= len;
+                        float yawRad = (float) Math.toRadians(entityYawField.getFloat(player));
+                        float sin = (float) Math.sin(yawRad);
+                        float cos = (float) Math.cos(yawRad);
+
+                        // Add missing ~80% of normal walk/sprint acceleration
+                        double boost = client.player.onGround ? 0.072D : 0.020D;
+                        double addX = (normS * cos - normF * sin) * boost;
+                        double addZ = (normF * cos + normS * sin) * boost;
+
+                        double vx = entityVelXField.getDouble(player) + addX;
+                        double vz = entityVelZField.getDouble(player) + addZ;
+                        double maxSpeed = client.player.onGround ? 0.28D : 0.34D;
+                        double horiz = Math.sqrt(vx * vx + vz * vz);
+                        if (horiz > maxSpeed) {
+                            double s = maxSpeed / horiz;
+                            vx *= s;
+                            vz *= s;
+                        }
+                        entityVelXField.setDouble(player, vx);
+                        entityVelZField.setDouble(player, vz);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    private static void applyNoSlowTail(Minecraft client, HitJumpConfig config) {
+        Object player = client.player;
+        ensureEntityMotionFields(player);
+
+        if (config.noSlowCobwebs && entityInWebField != null) {
+            try {
+                if (entityInWebField.getBoolean(player)) {
+                    entityInWebField.setBoolean(player, false);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // Soul Sand: vanilla sets Y-height to .875 and multiplies motionX/Z by 0.4 during block collisions
+        if (config.noSlowSoulSand
+                && client.player.onGround
+                && !isPlayerSneaking(player)
+                && entityYField != null && entityVelXField != null && entityVelZField != null) {
+            try {
+                boolean hitWall = (entityCollidedHorizField != null) && entityCollidedHorizField.getBoolean(player);
+                if (!hitWall) {
+                    double y = entityYField.getDouble(player);
+                    double fracY = y - Math.floor(y);
+                    if (Math.abs(fracY - 0.875D) < 0.003D) {
+                        double vx = entityVelXField.getDouble(player);
+                        double vz = entityVelZField.getDouble(player);
+                        double speed = Math.sqrt(vx * vx + vz * vz);
+                        if (speed > 0.015D && speed < 0.14D) {
+                            double factor = Math.min(2.5D, 0.23D / speed);
+                            entityVelXField.setDouble(player, vx * factor);
+                            entityVelZField.setDouble(player, vz * factor);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static void applyHeldItemAnimations(Minecraft client, HitJumpConfig config) {
+        if (config.noSwapDipEnabled) {
+            lockEquippedItemProgress(client);
+        }
+
+        // 1.7 Blockhit Animation: allow visual sword swing while blocking (holding Right + Left Click)
+        if (blockhitSwingCooldown > 0) {
+            blockhitSwingCooldown--;
+        }
+        if (config.blockhitAnimEnabled && client.screen == null) {
+            boolean leftDown = false;
+            boolean rightDown = false;
+            try {
+                leftDown = Mouse.isButtonDown(0);
+                rightDown = Mouse.isButtonDown(1);
+            } catch (Exception ignored) {
+            }
+            if (leftDown && rightDown && blockhitSwingCooldown == 0) {
+                triggerVisualArmSwing(client.player);
+                blockhitSwingCooldown = 6;
+            }
+        }
+    }
+
+    private static void triggerVisualArmSwing(Object player) {
+        ensureSwingFields(player);
+        if (swingInProgressField != null && swingProgressIntField != null) {
+            try {
+                boolean active = swingInProgressField.getBoolean(player);
+                int prog = swingProgressIntField.getInt(player);
+                if (!active || prog >= 3 || prog < 0) {
+                    swingProgressIntField.setInt(player, -1);
+                    swingInProgressField.setBoolean(player, true);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static void ensureSwingFields(Object player) {
+        if (swingFieldsSearched || player == null) {
+            return;
+        }
+        swingFieldsSearched = true;
+        Class<?> livingClass = getLivingBaseClass(player);
+        if (livingClass == null) {
+            return;
+        }
+        Field[] fields = livingClass.getDeclaredFields();
+        // Matches vanilla 1.8.9 LivingEntity layout around swing:
+        // boolean isSwingInProgress, int swingProgressInt, int arrowHitTimer, int hurtTime, int maxHurtTime, float attackedAtYaw
+        for (int i = 0; i <= fields.length - 6; i++) {
+            if (isInstanceField(fields[i], boolean.class)
+                    && isInstanceField(fields[i + 1], int.class)
+                    && isInstanceField(fields[i + 2], int.class)
+                    && isInstanceField(fields[i + 3], int.class)
+                    && isInstanceField(fields[i + 4], int.class)
+                    && isInstanceField(fields[i + 5], float.class)) {
+                swingInProgressField = fields[i];
+                swingProgressIntField = fields[i + 1];
+                swingInProgressField.setAccessible(true);
+                swingProgressIntField.setAccessible(true);
+                return;
+            }
+        }
+    }
+
+    private static void lockEquippedItemProgress(Minecraft client) {
+        ensureItemInHandRenderer(client);
+        if (itemInHandRendererObj != null && equippedProgressField != null && prevEquippedProgressField != null) {
+            try {
+                equippedProgressField.setFloat(itemInHandRendererObj, 1.0F);
+                prevEquippedProgressField.setFloat(itemInHandRendererObj, 1.0F);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static void ensureItemInHandRenderer(Minecraft client) {
+        if (itemRendererSearched || client == null) {
+            return;
+        }
+        itemRendererSearched = true;
+        for (Field mcField : client.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(mcField.getModifiers()) || mcField.getType().isPrimitive()) continue;
+            Object obj;
+            try {
+                mcField.setAccessible(true);
+                obj = mcField.get(client);
+            } catch (Exception ignored) {
+                continue;
+            }
+            if (obj == null || obj.getClass().isArray()) continue;
+            if (tryBindItemInHandRenderer(obj)) {
+                return;
+            }
+            // Check inside GameRenderer as well
+            for (Field sub : obj.getClass().getDeclaredFields()) {
+                if (Modifier.isStatic(sub.getModifiers()) || sub.getType().isPrimitive()) continue;
+                Object subObj;
+                try {
+                    sub.setAccessible(true);
+                    subObj = sub.get(obj);
+                } catch (Exception ignored) {
+                    continue;
+                }
+                if (subObj == null || subObj.getClass().isArray()) continue;
+                if (tryBindItemInHandRenderer(subObj)) {
+                    return;
+                }
+            }
+        }
+    }
+
+    private static boolean tryBindItemInHandRenderer(Object candidate) {
+        Field[] fields = candidate.getClass().getDeclaredFields();
+        if (fields.length < 6 || fields.length > 14) {
+            return false;
+        }
+        // Matches vanilla 1.8.9 ItemRenderer (ItemInHandRenderer):
+        // Minecraft, ItemStack, float equippedProgress, float prevEquippedProgress, RenderManager, RenderItem, int equippedItemSlot
+        for (int i = 0; i <= fields.length - 7; i++) {
+            if (isInstanceField(fields[i], Minecraft.class)
+                    && !Modifier.isStatic(fields[i + 1].getModifiers()) && !fields[i + 1].getType().isPrimitive()
+                    && isInstanceField(fields[i + 2], float.class)
+                    && isInstanceField(fields[i + 3], float.class)
+                    && !Modifier.isStatic(fields[i + 4].getModifiers()) && !fields[i + 4].getType().isPrimitive()
+                    && !Modifier.isStatic(fields[i + 5].getModifiers()) && !fields[i + 5].getType().isPrimitive()
+                    && isInstanceField(fields[i + 6], int.class)) {
+                itemInHandRendererObj = candidate;
+                equippedProgressField = fields[i + 2];
+                prevEquippedProgressField = fields[i + 3];
+                equippedProgressField.setAccessible(true);
+                prevEquippedProgressField.setAccessible(true);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void centerContainerScreen(Screen screen) {
+        if (screen == null) {
+            return;
+        }
+        if (!guiContainerSearched) {
+            Class<?> cls = screen.getClass();
+            while (cls != null && cls != Screen.class && cls != Object.class) {
+                Field[] fields = cls.getDeclaredFields();
+                // Matches vanilla 1.8.9 GuiContainer:
+                // int xSize, int ySize, Container inventorySlots, int guiLeft, int guiTop
+                for (int i = 0; i <= fields.length - 5; i++) {
+                    if (isInstanceField(fields[i], int.class)
+                            && isInstanceField(fields[i + 1], int.class)
+                            && !Modifier.isStatic(fields[i + 2].getModifiers()) && !fields[i + 2].getType().isPrimitive()
+                            && isInstanceField(fields[i + 3], int.class)
+                            && isInstanceField(fields[i + 4], int.class)) {
+                        try {
+                            fields[i].setAccessible(true);
+                            int xSizeVal = fields[i].getInt(screen);
+                            if (xSizeVal >= 120 && xSizeVal <= 300) {
+                                fields[i + 3].setAccessible(true);
+                                guiContainerClass = cls;
+                                guiXSizeField = fields[i];
+                                guiLeftField = fields[i + 3];
+                                guiContainerSearched = true;
+                                break;
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+                if (guiContainerSearched) break;
+                cls = cls.getSuperclass();
+            }
+        }
+
+        if (guiContainerClass != null && guiContainerClass.isInstance(screen) && guiXSizeField != null && guiLeftField != null) {
+            try {
+                int xSize = guiXSizeField.getInt(screen);
+                int centeredLeft = (screen.width - xSize) / 2;
+                int shiftedLeft = 160 + (screen.width - xSize - 200) / 2;
+                int currentLeft = guiLeftField.getInt(screen);
+                if (currentLeft == shiftedLeft && currentLeft != centeredLeft) {
+                    guiLeftField.setInt(screen, centeredLeft);
+                }
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -262,7 +629,7 @@ public class HitJumpMod implements ClientModInitializer {
             return false;
         }
         ensureKeyBindingFields(cachedClient);
-        int pickCode = getPickKeyCode();
+        int pickCode = getKeyBindingCode(pickKeyBindingObj, -98);
         if (pickCode != 0 && config.godPlaceKeyCode == pickCode) {
             return true;
         }
@@ -309,6 +676,9 @@ public class HitJumpMod implements ClientModInitializer {
         if (config.headFixEnabled) {
             syncHeadYawInternal(cachedClient);
         }
+        if (config.noSwapDipEnabled) {
+            lockEquippedItemProgress(cachedClient);
+        }
         // Parallax Fix (MC-1846): cancel vanilla 1.8.9's -0.1F backward first-person camera shift
         if (config.parallaxFixEnabled && getPerspective(cachedClient) == 0) {
             GL11.glTranslatef(0.0F, 0.0F, 0.1F);
@@ -353,619 +723,14 @@ public class HitJumpMod implements ClientModInitializer {
             }
         }
 
-        // Capture the finalized 3D projection & modelview matrices for through-wall ESP/nametags
-        PROJECTION_MATRIX.clear();
-        MODELVIEW_MATRIX.clear();
-        GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, PROJECTION_MATRIX);
-        GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, MODELVIEW_MATRIX);
-        cameraCapturedThisFrame = true;
+        WorldVisualsRenderer.captureCameraMatrices();
     }
 
     public static void onRenderWorldTail(float tickDelta) {
-        if (!cameraCapturedThisFrame || cachedClient == null || cachedClient.player == null || cachedClient.world == null) {
-            return;
+        if (cachedClient != null && cachedClient.screen != null && HitJumpConfig.getInstance().centerInventoryEnabled) {
+            centerContainerScreen(cachedClient.screen);
         }
-        cameraCapturedThisFrame = false;
-
-        HitJumpConfig config = HitJumpConfig.getInstance();
-        if (!config.wallHitboxesEnabled && !config.wallNametagsEnabled) {
-            return;
-        }
-
-        Object player = cachedClient.player;
-        ensureEntityMotionFields(player);
-        ensureNameAccessFields(player);
-        ensureTextRenderer(cachedClient);
-
-        if (entityXField == null || entityPrevXField == null || entityBoxField == null) {
-            return;
-        }
-
-        List<?> entities = getLoadedEntityList(cachedClient);
-        if (entities == null || entities.isEmpty()) {
-            return;
-        }
-
-        Class<?> playerBaseClass = getPlayerBaseClass(player);
-        Class<?> livingBaseClass = getLivingBaseClass(player);
-
-        double camX;
-        double camY;
-        double camZ;
-        float viewYaw;
-        float viewPitch;
-        try {
-            double pPrevX = entityPrevXField.getDouble(player);
-            double pPrevY = entityPrevYField.getDouble(player);
-            double pPrevZ = entityPrevZField.getDouble(player);
-            camX = pPrevX + (entityXField.getDouble(player) - pPrevX) * tickDelta;
-            camY = pPrevY + (entityYField.getDouble(player) - pPrevY) * tickDelta;
-            camZ = pPrevZ + (entityZField.getDouble(player) - pPrevZ) * tickDelta;
-
-            float pPrevYaw = entityPrevYawField.getFloat(player);
-            float pYaw = entityYawField.getFloat(player);
-            float pPrevPitch = entityPrevPitchField.getFloat(player);
-            float pPitch = entityPitchField.getFloat(player);
-            viewYaw = pPrevYaw + (pYaw - pPrevYaw) * tickDelta;
-            viewPitch = pPrevPitch + (pPitch - pPrevPitch) * tickDelta;
-
-            if (getPerspective(cachedClient) == 2) {
-                viewYaw += 180.0F;
-                viewPitch = -viewPitch;
-            }
-        } catch (Exception ignored) {
-            return;
-        }
-
-        double hitboxMaxDistSq = (double) config.hitboxRange * (double) config.hitboxRange;
-        double nametagMaxDistSq = (double) config.nametagRange * (double) config.nametagRange;
-        List<TagRenderEntry> tagsToRender = config.wallNametagsEnabled ? new ArrayList<TagRenderEntry>() : null;
-
-        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
-        GL11.glMatrixMode(GL11.GL_PROJECTION);
-        GL11.glPushMatrix();
-        PROJECTION_MATRIX.clear();
-        GL11.glLoadMatrix(PROJECTION_MATRIX);
-
-        GL11.glMatrixMode(GL11.GL_MODELVIEW);
-        GL11.glPushMatrix();
-        MODELVIEW_MATRIX.clear();
-        GL11.glLoadMatrix(MODELVIEW_MATRIX);
-
-        try {
-            GL11.glDisable(GL11.GL_DEPTH_TEST);
-            GL11.glDepthMask(false);
-            GL11.glDisable(GL11.GL_LIGHTING);
-            GL11.glDisable(GL11.GL_FOG);
-            GL11.glDisable(GL11.GL_CULL_FACE);
-            GL11.glEnable(GL11.GL_BLEND);
-            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-
-            if (config.wallHitboxesEnabled) {
-                GL11.glDisable(GL11.GL_TEXTURE_2D);
-                GL11.glLineWidth(1.5F);
-            }
-
-            int count = entities.size();
-            for (int i = 0; i < count; i++) {
-                Object entity;
-                try {
-                    entity = entities.get(i);
-                } catch (Exception ignored) {
-                    break;
-                }
-                if (entity == null || entity == player) {
-                    continue;
-                }
-                if (isEntityDead(entity)) {
-                    continue;
-                }
-
-                boolean isPlayer = playerBaseClass != null && playerBaseClass.isInstance(entity);
-                boolean isLiving = livingBaseClass != null && livingBaseClass.isInstance(entity);
-
-                double ex;
-                double ey;
-                double ez;
-                double interpX;
-                double interpY;
-                double interpZ;
-                Object boxObj;
-                try {
-                    ex = entityXField.getDouble(entity);
-                    ey = entityYField.getDouble(entity);
-                    ez = entityZField.getDouble(entity);
-
-                    double prevX = (entityLastTickXField != null)
-                            ? entityLastTickXField.getDouble(entity)
-                            : entityPrevXField.getDouble(entity);
-                    double prevY = (entityLastTickYField != null)
-                            ? entityLastTickYField.getDouble(entity)
-                            : entityPrevYField.getDouble(entity);
-                    double prevZ = (entityLastTickZField != null)
-                            ? entityLastTickZField.getDouble(entity)
-                            : entityPrevZField.getDouble(entity);
-
-                    interpX = prevX + (ex - prevX) * tickDelta;
-                    interpY = prevY + (ey - prevY) * tickDelta;
-                    interpZ = prevZ + (ez - prevZ) * tickDelta;
-                    boxObj = entityBoxField.get(entity);
-                } catch (Exception ignored) {
-                    continue;
-                }
-
-                double relX = interpX - camX;
-                double relY = interpY - camY;
-                double relZ = interpZ - camZ;
-                double distSq = relX * relX + relY * relY + relZ * relZ;
-
-                double boxHeight = 1.8D;
-                boolean hasValidBox = false;
-                double bMinX = 0, bMinY = 0, bMinZ = 0, bMaxX = 0, bMaxY = 0, bMaxZ = 0;
-
-                if (boxObj != null) {
-                    ensureBoxFields(boxObj);
-                    if (boxMinXField != null) {
-                        try {
-                            double shiftX = interpX - ex - camX;
-                            double shiftY = interpY - ey - camY;
-                            double shiftZ = interpZ - ez - camZ;
-                            bMinX = boxMinXField.getDouble(boxObj) + shiftX;
-                            bMinY = boxMinYField.getDouble(boxObj) + shiftY;
-                            bMinZ = boxMinZField.getDouble(boxObj) + shiftZ;
-                            bMaxX = boxMaxXField.getDouble(boxObj) + shiftX;
-                            bMaxY = boxMaxYField.getDouble(boxObj) + shiftY;
-                            bMaxZ = boxMaxZField.getDouble(boxObj) + shiftZ;
-                            double bw = bMaxX - bMinX;
-                            double bh = bMaxY - bMinY;
-                            if (bh > 0.01D) {
-                                boxHeight = bh;
-                            }
-                            hasValidBox = (bw > 0.01D && bh > 0.01D);
-                        } catch (Exception ignored) {
-                        }
-                    }
-                }
-
-                // 1. Through-wall Hitbox
-                if (config.wallHitboxesEnabled && hasValidBox && distSq <= hitboxMaxDistSq) {
-                    boolean targetMatch;
-                    if (config.hitboxTargetMode == 1) {
-                        targetMatch = isPlayer;
-                    } else if (config.hitboxTargetMode == 0) {
-                        targetMatch = isLiving;
-                    } else {
-                        targetMatch = true;
-                    }
-                    if (targetMatch) {
-                        drawWireframeHitbox(bMinX, bMinY, bMinZ, bMaxX, bMaxY, bMaxZ, isPlayer, isLiving);
-                    }
-                }
-
-                // 2. Collect Through-wall Nametags (players + mobs/entities with custom nametags)
-                if (tagsToRender != null && distSq <= nametagMaxDistSq) {
-                    String label = getEntityTagLabel(entity, isPlayer);
-                    if (label != null && !label.isEmpty()) {
-                        double tagY = hasValidBox ? (bMaxY + 0.45D) : (relY + boxHeight + 0.45D);
-                        tagsToRender.add(new TagRenderEntry(label, relX, tagY, relZ, distSq));
-                    }
-                }
-            }
-
-            // 3. Render Nametags sorted farthest-to-nearest so closer tags draw on top
-            if (tagsToRender != null && !tagsToRender.isEmpty() && textRendererObj != null) {
-                Collections.sort(tagsToRender, new Comparator<TagRenderEntry>() {
-                    @Override
-                    public int compare(TagRenderEntry a, TagRenderEntry b) {
-                        return Double.compare(b.distSq, a.distSq);
-                    }
-                });
-
-                float bgR = ((config.nametagBgColor >> 16) & 0xFF) / 255.0F;
-                float bgG = ((config.nametagBgColor >> 8) & 0xFF) / 255.0F;
-                float bgB = (config.nametagBgColor & 0xFF) / 255.0F;
-                float bgA = config.nametagBgOpacity / 100.0F;
-
-                for (int i = 0; i < tagsToRender.size(); i++) {
-                    TagRenderEntry entry = tagsToRender.get(i);
-                    drawWorldNametag(entry, viewYaw, viewPitch, bgR, bgG, bgB, bgA);
-                }
-            }
-        } catch (Exception ignored) {
-        } finally {
-            GL11.glMatrixMode(GL11.GL_PROJECTION);
-            GL11.glPopMatrix();
-            GL11.glMatrixMode(GL11.GL_MODELVIEW);
-            GL11.glPopMatrix();
-            GL11.glPopAttrib();
-        }
-    }
-
-    private static void drawWireframeHitbox(
-            double minX, double minY, double minZ,
-            double maxX, double maxY, double maxZ,
-            boolean isPlayer, boolean isLiving
-    ) {
-        if (isPlayer) {
-            GL11.glColor4f(1.0F, 1.0F, 1.0F, 0.95F);
-        } else {
-            GL11.glColor4f(0.85F, 0.92F, 1.0F, 0.78F);
-        }
-
-        GL11.glBegin(GL11.GL_LINES);
-        // Bottom face
-        GL11.glVertex3d(minX, minY, minZ); GL11.glVertex3d(maxX, minY, minZ);
-        GL11.glVertex3d(maxX, minY, minZ); GL11.glVertex3d(maxX, minY, maxZ);
-        GL11.glVertex3d(maxX, minY, maxZ); GL11.glVertex3d(minX, minY, maxZ);
-        GL11.glVertex3d(minX, minY, maxZ); GL11.glVertex3d(minX, minY, minZ);
-
-        // Top face
-        GL11.glVertex3d(minX, maxY, minZ); GL11.glVertex3d(maxX, maxY, minZ);
-        GL11.glVertex3d(maxX, maxY, minZ); GL11.glVertex3d(maxX, maxY, maxZ);
-        GL11.glVertex3d(maxX, maxY, maxZ); GL11.glVertex3d(minX, maxY, maxZ);
-        GL11.glVertex3d(minX, maxY, maxZ); GL11.glVertex3d(minX, maxY, minZ);
-
-        // Vertical edges
-        GL11.glVertex3d(minX, minY, minZ); GL11.glVertex3d(minX, maxY, minZ);
-        GL11.glVertex3d(maxX, minY, minZ); GL11.glVertex3d(maxX, maxY, minZ);
-        GL11.glVertex3d(maxX, minY, maxZ); GL11.glVertex3d(maxX, maxY, maxZ);
-        GL11.glVertex3d(minX, minY, maxZ); GL11.glVertex3d(minX, maxY, maxZ);
-        GL11.glEnd();
-
-        // Classic red eye-level band for living entities (like F3+B)
-        if (isLiving) {
-            double h = maxY - minY;
-            double eyeY = minY + (isPlayer ? Math.min(h - 0.12D, h * 0.90D) : (h * 0.85D));
-            GL11.glColor4f(1.0F, 0.2F, 0.2F, 0.95F);
-            GL11.glBegin(GL11.GL_LINES);
-            GL11.glVertex3d(minX, eyeY, minZ); GL11.glVertex3d(maxX, eyeY, minZ);
-            GL11.glVertex3d(maxX, eyeY, minZ); GL11.glVertex3d(maxX, eyeY, maxZ);
-            GL11.glVertex3d(maxX, eyeY, maxZ); GL11.glVertex3d(minX, eyeY, maxZ);
-            GL11.glVertex3d(minX, eyeY, maxZ); GL11.glVertex3d(minX, eyeY, minZ);
-            GL11.glEnd();
-        }
-    }
-
-    private static void drawWorldNametag(
-            TagRenderEntry entry,
-            float viewYaw,
-            float viewPitch,
-            float bgR, float bgG, float bgB, float bgA
-    ) {
-        int textWidth = getTextWidth(entry.label);
-        if (textWidth <= 0) {
-            return;
-        }
-        int halfWidth = textWidth / 2;
-
-        double dist = Math.sqrt(entry.distSq);
-        float scale = 0.02666667F;
-        if (dist > 10.0D) {
-            scale = (float) (0.02666667D * (1.0D + (dist - 10.0D) * 0.045D));
-            if (scale > 0.16F) {
-                scale = 0.16F;
-            }
-        }
-
-        GL11.glPushMatrix();
-        GL11.glTranslated(entry.relX, entry.relY, entry.relZ);
-        GL11.glRotatef(-viewYaw, 0.0F, 1.0F, 0.0F);
-        GL11.glRotatef(viewPitch, 1.0F, 0.0F, 0.0F);
-        GL11.glScalef(-scale, -scale, scale);
-
-        if (bgA > 0.005F) {
-            GL11.glDisable(GL11.GL_TEXTURE_2D);
-            GL11.glColor4f(bgR, bgG, bgB, bgA);
-            GL11.glBegin(GL11.GL_QUADS);
-            GL11.glVertex3d(-halfWidth - 2, -2, 0.0D);
-            GL11.glVertex3d(-halfWidth - 2, 9, 0.0D);
-            GL11.glVertex3d(halfWidth + 2, 9, 0.0D);
-            GL11.glVertex3d(halfWidth + 2, -2, 0.0D);
-            GL11.glEnd();
-        }
-
-        GL11.glEnable(GL11.GL_TEXTURE_2D);
-        GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
-        drawTextWithShadow(entry.label, -halfWidth, 0, 0xFFFFFFFF);
-
-        GL11.glPopMatrix();
-    }
-
-    public static int getTextWidth(String text) {
-        if (text == null || text.isEmpty()) {
-            return 0;
-        }
-        if (cachedClient != null) {
-            ensureTextRenderer(cachedClient);
-        }
-        if (textRendererObj != null && textGetWidthMethod != null) {
-            try {
-                return ((Integer) textGetWidthMethod.invoke(textRendererObj, text)).intValue();
-            } catch (Exception ignored) {
-            }
-        }
-        return text.length() * 6;
-    }
-
-    private static void drawTextWithShadow(String text, float x, float y, int color) {
-        if (textRendererObj != null && textDrawShadowMethod != null) {
-            try {
-                textDrawShadowMethod.invoke(textRendererObj, text, x, y, color);
-            } catch (Exception ignored) {
-            }
-        }
-    }
-
-    private static void ensureTextRenderer(Minecraft client) {
-        if (textRendererSearched || client == null) {
-            return;
-        }
-        textRendererSearched = true;
-        for (Field f : client.getClass().getDeclaredFields()) {
-            if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
-            Object val;
-            try {
-                f.setAccessible(true);
-                val = f.get(client);
-            } catch (Exception ignored) {
-                continue;
-            }
-            if (val == null || val.getClass().isArray()) continue;
-
-            Method foundWidth = null;
-            Method foundShadow = null;
-            Method foundPlain = null;
-            for (Method m : val.getClass().getMethods()) {
-                if (m.getReturnType() != int.class) continue;
-                Class<?>[] p = m.getParameterTypes();
-                if (p.length == 1 && p[0] == String.class) {
-                    foundWidth = m;
-                } else if (p.length == 4 && p[0] == String.class && p[1] == float.class && p[2] == float.class && p[3] == int.class) {
-                    foundShadow = m;
-                } else if (p.length == 4 && p[0] == String.class && p[1] == int.class && p[2] == int.class && p[3] == int.class) {
-                    foundPlain = m;
-                }
-            }
-            if (foundWidth != null && foundShadow != null && foundPlain != null) {
-                textRendererObj = val;
-                textGetWidthMethod = foundWidth;
-                textDrawShadowMethod = foundShadow;
-                return;
-            }
-        }
-    }
-
-    private static String getEntityTagLabel(Object entity, boolean isPlayer) {
-        if (isPlayer) {
-            String display = getFormattedDisplayName(entity);
-            if (display != null && !display.trim().isEmpty()) {
-                return display;
-            }
-            return getPlayerProfileName(entity);
-        }
-
-        // For non-player entities (mobs, villagers, named armor stands): only show if they have a custom nametag
-        String custom = getCustomNameTag(entity);
-        if (custom != null && !custom.trim().isEmpty()) {
-            return custom;
-        }
-        return null;
-    }
-
-    private static String getCustomNameTag(Object entity) {
-        if (dataWatcherField == null || dataWatcherGetStringMethod == null) {
-            return null;
-        }
-        try {
-            Object dw = dataWatcherField.get(entity);
-            if (dw != null) {
-                Object val = dataWatcherGetStringMethod.invoke(dw, 2);
-                return (val instanceof String) ? (String) val : null;
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
-    }
-
-    private static String getPlayerProfileName(Object playerEntity) {
-        if (gameProfileField == null || gameProfileGetNameMethod == null) {
-            return null;
-        }
-        try {
-            Object profile = gameProfileField.get(playerEntity);
-            if (profile != null) {
-                Object name = gameProfileGetNameMethod.invoke(profile);
-                return (name instanceof String) ? (String) name : null;
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
-    }
-
-    private static String getFormattedDisplayName(Object entity) {
-        if (entityGetDisplayNameMethod == null) {
-            return null;
-        }
-        try {
-            Object textObj = entityGetDisplayNameMethod.invoke(entity);
-            if (textObj == null) {
-                return null;
-            }
-            if (!textFormattedSearched) {
-                textFormattedSearched = true;
-                Class<?> textInterface = entityGetDisplayNameMethod.getReturnType();
-                Method best = null;
-                String bestVal = "";
-                for (Method m : textInterface.getMethods()) {
-                    if (m.getParameterTypes().length != 0 || m.getReturnType() != String.class) continue;
-                    if ("toString".equals(m.getName())) continue;
-                    try {
-                        Object res = m.invoke(textObj);
-                        if (res instanceof String) {
-                            String s = (String) res;
-                            if (s.indexOf('\u00A7') >= 0) {
-                                best = m;
-                                break;
-                            }
-                            if (s.length() > bestVal.length()) {
-                                best = m;
-                                bestVal = s;
-                            }
-                        }
-                    } catch (Exception ignored) {
-                    }
-                }
-                textFormattedMethod = best;
-            }
-            if (textFormattedMethod != null) {
-                Object res = textFormattedMethod.invoke(textObj);
-                if (res instanceof String) {
-                    return (String) res;
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
-    }
-
-    private static void ensureNameAccessFields(Object player) {
-        if (nameAccessSearched || player == null) {
-            return;
-        }
-        nameAccessSearched = true;
-
-        Class<?> entityClass = getEntityBaseClass(player);
-        Class<?> playerBaseClass = getPlayerBaseClass(player);
-
-        // Locate DataWatcher field on Entity (has (int)->byte, (int)->int, (int)->String)
-        if (entityClass != null) {
-            for (Field f : entityClass.getDeclaredFields()) {
-                if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
-                Class<?> ft = f.getType();
-                Method strM = null;
-                boolean hasByte = false;
-                boolean hasInt = false;
-                for (Method m : ft.getMethods()) {
-                    Class<?>[] p = m.getParameterTypes();
-                    if (p.length == 1 && p[0] == int.class) {
-                        if (m.getReturnType() == String.class) strM = m;
-                        else if (m.getReturnType() == byte.class) hasByte = true;
-                        else if (m.getReturnType() == int.class) hasInt = true;
-                    }
-                }
-                if (strM != null && hasByte && hasInt) {
-                    f.setAccessible(true);
-                    dataWatcherField = f;
-                    dataWatcherGetStringMethod = strM;
-                    break;
-                }
-            }
-
-            // Locate getDisplayName() on Entity (0-arg public method returning non-java.* interface)
-            for (Method m : entityClass.getMethods()) {
-                if (m.getParameterTypes().length != 0) continue;
-                Class<?> rt = m.getReturnType();
-                if (rt.isInterface() && !rt.getName().startsWith("java.")) {
-                    entityGetDisplayNameMethod = m;
-                    break;
-                }
-            }
-        }
-
-        // Locate GameProfile field on PlayerEntity as rock-solid fallback for player usernames
-        if (playerBaseClass != null) {
-            for (Field f : playerBaseClass.getDeclaredFields()) {
-                if (Modifier.isStatic(f.getModifiers())) continue;
-                if ("com.mojang.authlib.GameProfile".equals(f.getType().getName())) {
-                    f.setAccessible(true);
-                    gameProfileField = f;
-                    try {
-                        gameProfileGetNameMethod = f.getType().getMethod("getName");
-                    } catch (Exception ignored) {
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    private static Class<?> getPlayerBaseClass(Object player) {
-        Class<?> c = player.getClass().getSuperclass(); // ClientPlayerEntity
-        return (c != null) ? c.getSuperclass() : null;  // PlayerEntity
-    }
-
-    private static Class<?> getLivingBaseClass(Object player) {
-        Class<?> c = getPlayerBaseClass(player);
-        return (c != null) ? c.getSuperclass() : null;  // LivingEntity
-    }
-
-    private static Class<?> getEntityBaseClass(Object player) {
-        Class<?> c = getLivingBaseClass(player);
-        return (c != null) ? c.getSuperclass() : null;  // Entity
-    }
-
-    private static boolean isEntityDead(Object entity) {
-        if (entityDeadField != null) {
-            try {
-                return entityDeadField.getBoolean(entity);
-            } catch (Exception ignored) {
-            }
-        }
-        return false;
-    }
-
-    private static void ensureBoxFields(Object boxObj) {
-        if (boxFieldsSearched || boxObj == null) {
-            return;
-        }
-        boxFieldsSearched = true;
-        Field[] fields = boxObj.getClass().getDeclaredFields();
-        Field[] doubles = new Field[6];
-        int idx = 0;
-        for (Field f : fields) {
-            if (isInstanceField(f, double.class)) {
-                doubles[idx++] = f;
-                if (idx == 6) break;
-            }
-        }
-        if (idx == 6) {
-            boxMinXField = doubles[0];
-            boxMinYField = doubles[1];
-            boxMinZField = doubles[2];
-            boxMaxXField = doubles[3];
-            boxMaxYField = doubles[4];
-            boxMaxZField = doubles[5];
-            for (int i = 0; i < 6; i++) {
-                doubles[i].setAccessible(true);
-            }
-        }
-    }
-
-    private static List<?> getLoadedEntityList(Minecraft client) {
-        try {
-            List<?> bestList = null;
-            Class<?> worldCls = client.world.getClass();
-            while (worldCls != null && worldCls != Object.class) {
-                for (Field f : worldCls.getDeclaredFields()) {
-                    if (Modifier.isStatic(f.getModifiers())) continue;
-                    if (!List.class.isAssignableFrom(f.getType())) continue;
-                    f.setAccessible(true);
-                    Object val = f.get(client.world);
-                    if (val instanceof List) {
-                        List<?> list = (List<?>) val;
-                        if (list.contains(client.player)) {
-                            if (bestList == null || list.size() > bestList.size()) {
-                                bestList = list;
-                            }
-                        }
-                    }
-                }
-                worldCls = worldCls.getSuperclass();
-            }
-            return bestList;
-        } catch (Exception ignored) {
-            return null;
-        }
+        WorldVisualsRenderer.onRenderWorldTail(cachedClient, tickDelta);
     }
 
     public static boolean isBindDown(int bindCode) {
@@ -989,43 +754,44 @@ public class HitJumpMod implements ClientModInitializer {
         if (!godPlaceForcingUseKey) {
             return;
         }
-        boolean physicallyHeld = !forceOff && isBindDown(getUseKeyCode());
-        setUseKeyPressed(physicallyHeld);
+        boolean physicallyHeld = !forceOff && isBindDown(getKeyBindingCode(useKeyBindingObj, -99));
+        setKeyBindingPressed(useKeyBindingObj, physicallyHeld);
         godPlaceForcingUseKey = false;
     }
 
-    private static void setUseKeyPressed(boolean pressed) {
-        if (useKeyBindingObj != null && keyBindingPressedField != null) {
+    private static void releaseForcedSprintKey(boolean forceOff) {
+        if (!toggleSprintForcingKey) {
+            return;
+        }
+        boolean physicallyHeld = !forceOff && isBindDown(getKeyBindingCode(sprintKeyBindingObj, Keyboard.KEY_LCONTROL));
+        setKeyBindingPressed(sprintKeyBindingObj, physicallyHeld);
+        toggleSprintForcingKey = false;
+    }
+
+    private static void setKeyBindingPressed(Object binding, boolean pressed) {
+        if (binding != null && keyBindingPressedField != null) {
             try {
-                keyBindingPressedField.setBoolean(useKeyBindingObj, pressed);
+                keyBindingPressedField.setBoolean(binding, pressed);
             } catch (Exception ignored) {
             }
         }
     }
 
-    private static int getUseKeyCode() {
-        if (useKeyBindingObj != null && keyBindingKeyCodeField != null) {
+    private static int getKeyBindingCode(Object binding, int fallback) {
+        if (binding != null && keyBindingKeyCodeField != null) {
             try {
-                return keyBindingKeyCodeField.getInt(useKeyBindingObj);
+                return keyBindingKeyCodeField.getInt(binding);
             } catch (Exception ignored) {
             }
         }
-        return -99; // Default Right Click
-    }
-
-    private static int getPickKeyCode() {
-        if (pickKeyBindingObj != null && keyBindingKeyCodeField != null) {
-            try {
-                return keyBindingKeyCodeField.getInt(pickKeyBindingObj);
-            } catch (Exception ignored) {
-            }
-        }
-        return -98; // Default Middle Mouse
+        return fallback;
     }
 
     private static void clearPickKeyPressTimeIfShared(Minecraft client, int godPlaceKeyCode) {
         ensureKeyBindingFields(client);
-        if (pickKeyBindingObj != null && keyBindingPressTimeField != null && getPickKeyCode() == godPlaceKeyCode) {
+        if (pickKeyBindingObj != null
+                && keyBindingPressTimeField != null
+                && getKeyBindingCode(pickKeyBindingObj, -98) == godPlaceKeyCode) {
             try {
                 keyBindingPressTimeField.setInt(pickKeyBindingObj, 0);
             } catch (Exception ignored) {
@@ -1066,9 +832,12 @@ public class HitJumpMod implements ClientModInitializer {
                 } else if ("key.pickItem".equals(desc)) {
                     pickKeyBindingObj = val;
                     locateKeyBindingInternalFields(val.getClass());
+                } else if ("key.sprint".equals(desc)) {
+                    sprintKeyBindingObj = val;
+                    locateKeyBindingInternalFields(val.getClass());
                 }
             }
-            if (useKeyBindingObj != null) {
+            if (useKeyBindingObj != null || sprintKeyBindingObj != null) {
                 return;
             }
         }
@@ -1084,7 +853,7 @@ public class HitJumpMod implements ClientModInitializer {
                 try {
                     f.setAccessible(true);
                     Object s = f.get(obj);
-                    if ("key.use".equals(s) || "key.pickItem".equals(s)) {
+                    if ("key.use".equals(s) || "key.pickItem".equals(s) || "key.sprint".equals(s)) {
                         return (String) s;
                     }
                 } catch (Exception ignored) {
@@ -1257,7 +1026,32 @@ public class HitJumpMod implements ClientModInitializer {
         return 0.0D;
     }
 
-    private static void ensureEntityMotionFields(Object entity) {
+    static Class<?> getPlayerBaseClass(Object player) {
+        Class<?> c = player.getClass().getSuperclass();
+        return (c != null) ? c.getSuperclass() : null;
+    }
+
+    static Class<?> getLivingBaseClass(Object player) {
+        Class<?> c = getPlayerBaseClass(player);
+        return (c != null) ? c.getSuperclass() : null;
+    }
+
+    static Class<?> getEntityBaseClass(Object player) {
+        Class<?> c = getLivingBaseClass(player);
+        return (c != null) ? c.getSuperclass() : null;
+    }
+
+    static boolean isEntityDead(Object entity) {
+        if (entityDeadField != null) {
+            try {
+                return entityDeadField.getBoolean(entity);
+            } catch (Exception ignored) {
+            }
+        }
+        return false;
+    }
+
+    static void ensureEntityMotionFields(Object entity) {
         if (entityMotionSearched) {
             return;
         }
@@ -1285,7 +1079,9 @@ public class HitJumpMod implements ClientModInitializer {
                     entityXField = fields[i + 3];
                     entityYField = fields[i + 4];
                     entityZField = fields[i + 5];
+                    entityVelXField = fields[i + 6];
                     entityVelYField = fields[i + 7];
+                    entityVelZField = fields[i + 8];
                     entityYawField = fields[i + 9];
                     entityPitchField = fields[i + 10];
                     entityPrevYawField = fields[i + 11];
@@ -1297,7 +1093,9 @@ public class HitJumpMod implements ClientModInitializer {
                     entityXField.setAccessible(true);
                     entityYField.setAccessible(true);
                     entityZField.setAccessible(true);
+                    entityVelXField.setAccessible(true);
                     entityVelYField.setAccessible(true);
+                    entityVelZField.setAccessible(true);
                     entityYawField.setAccessible(true);
                     entityPitchField.setAccessible(true);
                     entityPrevYawField.setAccessible(true);
@@ -1307,11 +1105,18 @@ public class HitJumpMod implements ClientModInitializer {
                         entityBoxField = fields[i + 13];
                         entityBoxField.setAccessible(true);
                     }
+                    if (i + 15 < fields.length && isInstanceField(fields[i + 15], boolean.class)) {
+                        entityCollidedHorizField = fields[i + 15];
+                        entityCollidedHorizField.setAccessible(true);
+                    }
+                    if (i + 19 < fields.length && isInstanceField(fields[i + 19], boolean.class)) {
+                        entityInWebField = fields[i + 19];
+                        entityInWebField.setAccessible(true);
+                    }
                     if (i + 21 < fields.length && isInstanceField(fields[i + 21], boolean.class)) {
                         entityDeadField = fields[i + 21];
                         entityDeadField.setAccessible(true);
                     }
-                    // Scan ahead for lastTickPosX, lastTickPosY, lastTickPosZ (3 consecutive doubles)
                     int maxScan = Math.min(fields.length - 3, i + 40);
                     for (int j = i + 14; j <= maxScan; j++) {
                         if (isInstanceField(fields[j], double.class)
@@ -1364,30 +1169,57 @@ public class HitJumpMod implements ClientModInitializer {
         }
     }
 
-    private static boolean isPlayerSneaking(Object player) {
-        if (!inputSneakSearched) {
-            inputSneakSearched = true;
-            Class<?> cls = player.getClass();
-            while (cls != null && cls != Object.class) {
-                for (Field f : cls.getDeclaredFields()) {
-                    if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
-                    try {
-                        f.setAccessible(true);
-                        Object val = f.get(player);
-                        if (val == null) continue;
-                        Field sneak = findInputSneakField(val.getClass());
-                        if (sneak != null) {
-                            playerInputField = f;
-                            inputSneakField = sneak;
-                            break;
-                        }
-                    } catch (Exception ignored) {
+    private static void ensureInputFields(Object player) {
+        if (inputFieldsSearched || player == null) {
+            return;
+        }
+        inputFieldsSearched = true;
+        Class<?> cls = player.getClass();
+        while (cls != null && cls != Object.class) {
+            for (Field f : cls.getDeclaredFields()) {
+                if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
+                try {
+                    f.setAccessible(true);
+                    Object val = f.get(player);
+                    if (val == null) continue;
+                    if (bindInputClassFields(val.getClass())) {
+                        playerInputField = f;
+                        return;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+    }
+
+    private static boolean bindInputClassFields(Class<?> startClass) {
+        Class<?> cls = startClass;
+        while (cls != null && cls != Object.class) {
+            Field[] fields = cls.getDeclaredFields();
+            if (fields.length >= 4 && fields.length <= 8) {
+                for (int i = 0; i <= fields.length - 4; i++) {
+                    if (isInstanceField(fields[i], float.class)
+                            && isInstanceField(fields[i + 1], float.class)
+                            && isInstanceField(fields[i + 2], boolean.class)
+                            && isInstanceField(fields[i + 3], boolean.class)) {
+                        inputStrafeField = fields[i];
+                        inputForwardField = fields[i + 1];
+                        inputSneakField = fields[i + 3];
+                        inputStrafeField.setAccessible(true);
+                        inputForwardField.setAccessible(true);
+                        inputSneakField.setAccessible(true);
+                        return true;
                     }
                 }
-                if (inputSneakField != null) break;
-                cls = cls.getSuperclass();
             }
+            cls = cls.getSuperclass();
         }
+        return false;
+    }
+
+    private static boolean isPlayerSneaking(Object player) {
+        ensureInputFields(player);
         if (playerInputField != null && inputSneakField != null) {
             try {
                 Object input = playerInputField.get(player);
@@ -1400,27 +1232,35 @@ public class HitJumpMod implements ClientModInitializer {
         return false;
     }
 
-    private static Field findInputSneakField(Class<?> startClass) {
-        Class<?> cls = startClass;
-        while (cls != null && cls != Object.class) {
-            Field[] fields = cls.getDeclaredFields();
-            if (fields.length >= 4 && fields.length <= 8) {
-                for (int i = 0; i <= fields.length - 4; i++) {
-                    if (isInstanceField(fields[i], float.class)
-                            && isInstanceField(fields[i + 1], float.class)
-                            && isInstanceField(fields[i + 2], boolean.class)
-                            && isInstanceField(fields[i + 3], boolean.class)) {
-                        fields[i + 3].setAccessible(true);
-                        return fields[i + 3];
-                    }
+    private static float getInputForward(Object player) {
+        ensureInputFields(player);
+        if (playerInputField != null && inputForwardField != null) {
+            try {
+                Object input = playerInputField.get(player);
+                if (input != null) {
+                    return inputForwardField.getFloat(input);
                 }
+            } catch (Exception ignored) {
             }
-            cls = cls.getSuperclass();
         }
-        return null;
+        return 0.0F;
     }
 
-    private static int getPerspective(Minecraft client) {
+    private static float getInputStrafe(Object player) {
+        ensureInputFields(player);
+        if (playerInputField != null && inputStrafeField != null) {
+            try {
+                Object input = playerInputField.get(player);
+                if (input != null) {
+                    return inputStrafeField.getFloat(input);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return 0.0F;
+    }
+
+    static int getPerspective(Minecraft client) {
         if (!perspectiveSearched) {
             perspectiveSearched = true;
             for (Field f : client.getClass().getDeclaredFields()) {
@@ -1516,93 +1356,4 @@ public class HitJumpMod implements ClientModInitializer {
     }
 
     private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
-        if (!jumpTicksSearched) {
-            jumpTicksField = findJumpTicksField(player.getClass());
-            jumpTicksSearched = true;
-        }
-        if (jumpTicksField != null) {
-            try {
-                int currentDelay = jumpTicksField.getInt(player);
-                if (currentDelay > maxDelayTicks) {
-                    jumpTicksField.setInt(player, maxDelayTicks);
-                }
-            } catch (Exception ignored) {
-            }
-        }
-    }
-
-    private static Field findJumpTicksField(Class<?> startClass) {
-        Class<?> cls = startClass;
-        while (cls != null && cls != Object.class) {
-            Field[] fields = cls.getDeclaredFields();
-            for (int i = 0; i <= fields.length - 8; i++) {
-                if (isInstanceField(fields[i], boolean.class)
-                        && isInstanceField(fields[i + 1], cls)
-                        && isInstanceField(fields[i + 2], int.class)
-                        && isInstanceField(fields[i + 3], cls)
-                        && isInstanceField(fields[i + 4], int.class)
-                        && isInstanceField(fields[i + 5], float.class)
-                        && isInstanceField(fields[i + 6], int.class)
-                        && isInstanceField(fields[i + 7], float.class)) {
-                    fields[i + 6].setAccessible(true);
-                    return fields[i + 6];
-                }
-            }
-            cls = cls.getSuperclass();
-        }
-        return null;
-    }
-
-    private static int getHurtTime(Object player) {
-        if (!hurtTimeSearched) {
-            hurtTimeField = findHurtTimeField(player.getClass());
-            hurtTimeSearched = true;
-        }
-        if (hurtTimeField != null) {
-            try {
-                return hurtTimeField.getInt(player);
-            } catch (Exception ignored) {
-            }
-        }
-        return 0;
-    }
-
-    private static Field findHurtTimeField(Class<?> startClass) {
-        Class<?> cls = startClass;
-        while (cls != null && cls != Object.class) {
-            Field[] fields = cls.getDeclaredFields();
-            for (int i = 0; i <= fields.length - 9; i++) {
-                if (isInstanceField(fields[i], boolean.class)
-                        && isInstanceField(fields[i + 1], int.class)
-                        && isInstanceField(fields[i + 2], int.class)
-                        && isInstanceField(fields[i + 3], int.class)
-                        && isInstanceField(fields[i + 4], int.class)
-                        && isInstanceField(fields[i + 5], float.class)
-                        && isInstanceField(fields[i + 6], int.class)
-                        && isInstanceField(fields[i + 7], float.class)
-                        && isInstanceField(fields[i + 8], float.class)) {
-                    fields[i + 3].setAccessible(true);
-                    return fields[i + 3];
-                }
-            }
-            cls = cls.getSuperclass();
-        }
-        return null;
-    }
-
-    private static boolean isInstanceField(Field field, Class<?> expectedType) {
-        return !Modifier.isStatic(field.getModifiers()) && field.getType() == expectedType;
-    }
-
-    private static boolean rollFrequency(int frequencyPercent) {
-        if (frequencyPercent <= 0) return false;
-        if (frequencyPercent >= 100) return true;
-        return RANDOM.nextInt(100) < frequencyPercent;
-    }
-
-    private static void tryJump(Minecraft client) {
-        if (client.player != null && client.player.onGround) {
-            client.player.jump();
-        }
-    }
-}
+        if (!jumpTicks
