@@ -47,6 +47,15 @@ public class HitJumpConfig {
     public boolean smoothSneakEnabled = true;
     public boolean parallaxFixEnabled = true;
 
+    // Through-wall Hitboxes & Nametags
+    public boolean wallHitboxesEnabled = true;
+    public int hitboxTargetMode = 0; // 0 = Living (Players + Mobs), 1 = Players Only, 2 = All Entities
+    public int hitboxRange = 64;
+    public boolean wallNametagsEnabled = true;
+    public int nametagRange = 128;
+    public int nametagBgColor = 0x000000;
+    public int nametagBgOpacity = 35;
+
     // Menu hotkey
     public int menuKeyCode = Keyboard.KEY_H;
 
@@ -99,6 +108,13 @@ public class HitJumpConfig {
         this.headFixEnabled = true;
         this.smoothSneakEnabled = true;
         this.parallaxFixEnabled = true;
+        this.wallHitboxesEnabled = true;
+        this.hitboxTargetMode = 0;
+        this.hitboxRange = 64;
+        this.wallNametagsEnabled = true;
+        this.nametagRange = 128;
+        this.nametagBgColor = 0x000000;
+        this.nametagBgOpacity = 35;
         this.menuKeyCode = Keyboard.KEY_H;
     }
 
@@ -118,6 +134,14 @@ public class HitJumpConfig {
         if (!validGodPlaceMouse && !validGodPlaceKey) {
             godPlaceKeyCode = -98;
         }
+        if (hitboxTargetMode < 0 || hitboxTargetMode > 2) hitboxTargetMode = 0;
+        if (hitboxRange < 8) hitboxRange = 8;
+        if (hitboxRange > 256) hitboxRange = 256;
+        if (nametagRange < 16) nametagRange = 16;
+        if (nametagRange > 256) nametagRange = 256;
+        nametagBgColor &= 0xFFFFFF;
+        if (nametagBgOpacity < 0) nametagBgOpacity = 0;
+        if (nametagBgOpacity > 100) nametagBgOpacity = 100;
         if (menuKeyCode <= 0 || menuKeyCode >= 256) menuKeyCode = Keyboard.KEY_H;
     }
 }
