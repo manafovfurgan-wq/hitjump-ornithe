@@ -25,6 +25,7 @@ public class HitJumpConfig {
 
     // HitJump settings
     public boolean enabled = true;
+    public boolean hitJumpPlayersOnly = true;
     public int jumpFrequency = 100;
     public int latencyTicks = 0;
 
@@ -35,6 +36,11 @@ public class HitJumpConfig {
     // NoHitDelay settings
     public boolean noHitDelayEnabled = true;
     public int hitDelayTicks = 0;
+
+    // 1.7 Camera / Head / Eye fixes
+    public boolean headFixEnabled = true;
+    public boolean smoothSneakEnabled = true;
+    public boolean parallaxFixEnabled = true;
 
     // Menu hotkey
     public int menuKeyCode = Keyboard.KEY_H;
@@ -75,12 +81,16 @@ public class HitJumpConfig {
 
     public void resetDefaults() {
         this.enabled = true;
+        this.hitJumpPlayersOnly = true;
         this.jumpFrequency = 100;
         this.latencyTicks = 0;
         this.noJumpDelayEnabled = true;
         this.jumpDelayTicks = 0;
         this.noHitDelayEnabled = true;
         this.hitDelayTicks = 0;
+        this.headFixEnabled = true;
+        this.smoothSneakEnabled = true;
+        this.parallaxFixEnabled = true;
         this.menuKeyCode = Keyboard.KEY_H;
     }
 
