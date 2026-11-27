@@ -3,8 +3,8 @@
   "id": "hitjump",
   "version": "${version}",
   "name": "Tomato Cream",
-  "description": "1.8.9 PvP & QoL tweaks: HitJump, NoJumpDelay, NoHitDelay, GodPlace, and 1.7 camera fixes.",
-  "authors": ["You"],
+  "description": "1.8.9 PvP & QoL tweaks",
+  "authors": ["Thewier"],
   "license": "MIT",
   "environment": "client",
   "entrypoints": {
