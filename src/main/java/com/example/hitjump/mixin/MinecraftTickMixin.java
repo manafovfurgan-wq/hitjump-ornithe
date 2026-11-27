@@ -28,4 +28,11 @@ public class MinecraftTickMixin {
     private void hitjump$onAfterAttack(CallbackInfo ci) {
         HitJumpMod.onAfterAttack((Minecraft) (Object) this);
     }
+
+    @Inject(method = "doPick", at = @At("HEAD"), cancellable = true, require = 0)
+    private void hitjump$onDoPick(CallbackInfo ci) {
+        if (HitJumpMod.shouldBlockPickBlock()) {
+            ci.cancel();
+        }
+    }
 }
