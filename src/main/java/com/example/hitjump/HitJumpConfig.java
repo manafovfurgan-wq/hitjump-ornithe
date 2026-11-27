@@ -37,6 +37,10 @@ public class HitJumpConfig {
     public boolean noHitDelayEnabled = true;
     public int hitDelayTicks = 0;
 
+    // GodPlace (FastPlace) settings
+    public boolean godPlaceEnabled = false;
+    public int godPlaceDelayTicks = 0;
+
     // 1.7 Camera / Head / Eye fixes
     public boolean headFixEnabled = true;
     public boolean smoothSneakEnabled = true;
@@ -88,6 +92,8 @@ public class HitJumpConfig {
         this.jumpDelayTicks = 0;
         this.noHitDelayEnabled = true;
         this.hitDelayTicks = 0;
+        this.godPlaceEnabled = false;
+        this.godPlaceDelayTicks = 0;
         this.headFixEnabled = true;
         this.smoothSneakEnabled = true;
         this.parallaxFixEnabled = true;
@@ -103,6 +109,8 @@ public class HitJumpConfig {
         if (jumpDelayTicks > 10) jumpDelayTicks = 10;
         if (hitDelayTicks < 0) hitDelayTicks = 0;
         if (hitDelayTicks > 10) hitDelayTicks = 10;
+        if (godPlaceDelayTicks < 0) godPlaceDelayTicks = 0;
+        if (godPlaceDelayTicks > 3) godPlaceDelayTicks = 3;
         if (menuKeyCode <= 0 || menuKeyCode >= 256) menuKeyCode = Keyboard.KEY_H;
     }
 }
