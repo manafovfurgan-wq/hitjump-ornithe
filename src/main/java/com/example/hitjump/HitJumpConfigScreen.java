@@ -3,6 +3,7 @@ package com.example.hitjump;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
 public class HitJumpConfigScreen extends Screen {
     private static final String MENU_TITLE = "Tomato Cream";
@@ -23,16 +24,17 @@ public class HitJumpConfigScreen extends Screen {
     private static final int BTN_HITDELAY_PLUS = 11;
 
     private static final int BTN_GODPLACE_TOGGLE = 12;
-    private static final int BTN_GODPLACE_MINUS = 13;
-    private static final int BTN_GODPLACE_PLUS = 14;
+    private static final int BTN_GODPLACE_KEY = 13;
+    private static final int BTN_GODPLACE_MINUS = 14;
+    private static final int BTN_GODPLACE_PLUS = 15;
 
-    private static final int BTN_HEADFIX_TOGGLE = 15;
-    private static final int BTN_SMOOTHSNEAK_TOGGLE = 16;
-    private static final int BTN_PARALLAX_TOGGLE = 17;
+    private static final int BTN_HEADFIX_TOGGLE = 16;
+    private static final int BTN_SMOOTHSNEAK_TOGGLE = 17;
+    private static final int BTN_PARALLAX_TOGGLE = 18;
 
-    private static final int BTN_KEYBIND = 18;
-    private static final int BTN_RESET = 19;
-    private static final int BTN_DONE = 20;
+    private static final int BTN_KEYBIND = 19;
+    private static final int BTN_RESET = 20;
+    private static final int BTN_DONE = 21;
 
     private final Screen parent;
     private ButtonWidget hitJumpToggleButton;
@@ -40,13 +42,16 @@ public class HitJumpConfigScreen extends Screen {
     private ButtonWidget noJumpDelayToggleButton;
     private ButtonWidget noHitDelayToggleButton;
     private ButtonWidget godPlaceToggleButton;
+    private ButtonWidget godPlaceKeyButton;
     private ButtonWidget headFixToggleButton;
     private ButtonWidget smoothSneakToggleButton;
     private ButtonWidget parallaxToggleButton;
     private ButtonWidget keybindButton;
 
-    private boolean waitingForKey = false;
+    private boolean waitingForMenuKey = false;
+    private boolean waitingForGodPlaceKey = false;
     private final boolean[] keysHeldAtClick = new boolean[256];
+    private final boolean[] mouseHeldAtClick = new boolean[16];
 
     public HitJumpConfigScreen(Screen parent) {
         this.parent = parent;
@@ -55,15 +60,16 @@ public class HitJumpConfigScreen extends Screen {
     @Override
     public void init() {
         this.buttons.clear();
-        this.waitingForKey = false;
+        this.waitingForMenuKey = false;
+        this.waitingForGodPlaceKey = false;
         HitJumpConfig config = HitJumpConfig.getInstance();
 
         int centerX = this.width / 2;
         int leftX = centerX - 105;
         int rightX = centerX + 105;
-        int startY = Math.max(22, (this.height - 224) / 2);
+        int startY = Math.max(24, (this.height - 196) / 2);
 
-        // Left column: HitJump + NoJumpDelay
+        // Left column: HitJump + NoJumpDelay + NoHitDelay
         this.hitJumpToggleButton = new ButtonWidget(
                 BTN_HITJUMP_TOGGLE,
                 leftX - 100, startY,
@@ -97,32 +103,40 @@ public class HitJumpConfigScreen extends Screen {
         this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_MINUS, leftX - 100, startY + 124, 40, 20, "-1t"));
         this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_PLUS, leftX + 60, startY + 124, 40, 20, "+1t"));
 
-        // Right column: NoHitDelay + GodPlace + 1.7 Camera / Head / Eye Fixes
         this.noHitDelayToggleButton = new ButtonWidget(
                 BTN_NOHITDELAY_TOGGLE,
-                rightX - 100, startY,
+                leftX - 100, startY + 152,
                 200, 20,
                 getNoHitDelayLabel(config)
         );
         this.buttons.add(this.noHitDelayToggleButton);
 
-        this.buttons.add(new ButtonWidget(BTN_HITDELAY_MINUS, rightX - 100, startY + 24, 40, 20, "-1t"));
-        this.buttons.add(new ButtonWidget(BTN_HITDELAY_PLUS, rightX + 60, startY + 24, 40, 20, "+1t"));
+        this.buttons.add(new ButtonWidget(BTN_HITDELAY_MINUS, leftX - 100, startY + 176, 40, 20, "-1t"));
+        this.buttons.add(new ButtonWidget(BTN_HITDELAY_PLUS, leftX + 60, startY + 176, 40, 20, "+1t"));
 
+        // Right column: GodPlace + 1.7 Fixes + Menu Key + Reset / Save
         this.godPlaceToggleButton = new ButtonWidget(
                 BTN_GODPLACE_TOGGLE,
-                rightX - 100, startY + 52,
+                rightX - 100, startY,
                 200, 20,
                 getGodPlaceLabel(config)
         );
         this.buttons.add(this.godPlaceToggleButton);
 
-        this.buttons.add(new ButtonWidget(BTN_GODPLACE_MINUS, rightX - 100, startY + 76, 40, 20, "-1t"));
-        this.buttons.add(new ButtonWidget(BTN_GODPLACE_PLUS, rightX + 60, startY + 76, 40, 20, "+1t"));
+        this.godPlaceKeyButton = new ButtonWidget(
+                BTN_GODPLACE_KEY,
+                rightX - 100, startY + 24,
+                200, 20,
+                getGodPlaceKeyLabel(config)
+        );
+        this.buttons.add(this.godPlaceKeyButton);
+
+        this.buttons.add(new ButtonWidget(BTN_GODPLACE_MINUS, rightX - 100, startY + 48, 40, 20, "-1t"));
+        this.buttons.add(new ButtonWidget(BTN_GODPLACE_PLUS, rightX + 60, startY + 48, 40, 20, "+1t"));
 
         this.headFixToggleButton = new ButtonWidget(
                 BTN_HEADFIX_TOGGLE,
-                rightX - 100, startY + 104,
+                rightX - 100, startY + 76,
                 200, 20,
                 getHeadFixLabel(config)
         );
@@ -130,7 +144,7 @@ public class HitJumpConfigScreen extends Screen {
 
         this.smoothSneakToggleButton = new ButtonWidget(
                 BTN_SMOOTHSNEAK_TOGGLE,
-                rightX - 100, startY + 128,
+                rightX - 100, startY + 100,
                 200, 20,
                 getSmoothSneakLabel(config)
         );
@@ -138,23 +152,22 @@ public class HitJumpConfigScreen extends Screen {
 
         this.parallaxToggleButton = new ButtonWidget(
                 BTN_PARALLAX_TOGGLE,
-                rightX - 100, startY + 152,
+                rightX - 100, startY + 124,
                 200, 20,
                 getParallaxLabel(config)
         );
         this.buttons.add(this.parallaxToggleButton);
 
-        // Bottom centered: Keybind, Reset, Save & Done
         this.keybindButton = new ButtonWidget(
                 BTN_KEYBIND,
-                centerX - 100, startY + 180,
+                rightX - 100, startY + 152,
                 200, 20,
                 getKeybindLabel(config)
         );
         this.buttons.add(this.keybindButton);
 
-        this.buttons.add(new ButtonWidget(BTN_RESET, centerX - 100, startY + 204, 95, 20, "Reset"));
-        this.buttons.add(new ButtonWidget(BTN_DONE, centerX + 5, startY + 204, 95, 20, "Save & Done"));
+        this.buttons.add(new ButtonWidget(BTN_RESET, rightX - 100, startY + 176, 95, 20, "Reset"));
+        this.buttons.add(new ButtonWidget(BTN_DONE, rightX + 5, startY + 176, 95, 20, "Save & Done"));
     }
 
     @Override
@@ -165,9 +178,13 @@ public class HitJumpConfigScreen extends Screen {
 
         HitJumpConfig config = HitJumpConfig.getInstance();
 
-        if (button.id != BTN_KEYBIND && this.waitingForKey) {
-            this.waitingForKey = false;
+        if (button.id != BTN_KEYBIND && this.waitingForMenuKey) {
+            this.waitingForMenuKey = false;
             this.keybindButton.message = getKeybindLabel(config);
+        }
+        if (button.id != BTN_GODPLACE_KEY && this.waitingForGodPlaceKey) {
+            this.waitingForGodPlaceKey = false;
+            this.godPlaceKeyButton.message = getGodPlaceKeyLabel(config);
         }
 
         switch (button.id) {
@@ -215,6 +232,13 @@ public class HitJumpConfigScreen extends Screen {
                 config.godPlaceEnabled = !config.godPlaceEnabled;
                 this.godPlaceToggleButton.message = getGodPlaceLabel(config);
                 break;
+            case BTN_GODPLACE_KEY:
+                this.waitingForGodPlaceKey = !this.waitingForGodPlaceKey;
+                if (this.waitingForGodPlaceKey) {
+                    snapshotInputs();
+                }
+                this.godPlaceKeyButton.message = getGodPlaceKeyLabel(config);
+                break;
             case BTN_GODPLACE_MINUS:
                 config.godPlaceDelayTicks = Math.max(0, config.godPlaceDelayTicks - 1);
                 break;
@@ -234,15 +258,9 @@ public class HitJumpConfigScreen extends Screen {
                 this.parallaxToggleButton.message = getParallaxLabel(config);
                 break;
             case BTN_KEYBIND:
-                this.waitingForKey = !this.waitingForKey;
-                if (this.waitingForKey) {
-                    for (int k = 1; k < 256; k++) {
-                        try {
-                            this.keysHeldAtClick[k] = Keyboard.isKeyDown(k);
-                        } catch (Exception ignored) {
-                            this.keysHeldAtClick[k] = false;
-                        }
-                    }
+                this.waitingForMenuKey = !this.waitingForMenuKey;
+                if (this.waitingForMenuKey) {
+                    snapshotInputs();
                 }
                 this.keybindButton.message = getKeybindLabel(config);
                 break;
@@ -253,6 +271,7 @@ public class HitJumpConfigScreen extends Screen {
                 this.noJumpDelayToggleButton.message = getNoJumpDelayLabel(config);
                 this.noHitDelayToggleButton.message = getNoHitDelayLabel(config);
                 this.godPlaceToggleButton.message = getGodPlaceLabel(config);
+                this.godPlaceKeyButton.message = getGodPlaceKeyLabel(config);
                 this.headFixToggleButton.message = getHeadFixLabel(config);
                 this.smoothSneakToggleButton.message = getSmoothSneakLabel(config);
                 this.parallaxToggleButton.message = getParallaxLabel(config);
@@ -267,11 +286,37 @@ public class HitJumpConfigScreen extends Screen {
         }
     }
 
+    private void snapshotInputs() {
+        for (int k = 1; k < 256; k++) {
+            try {
+                this.keysHeldAtClick[k] = Keyboard.isKeyDown(k);
+            } catch (Exception ignored) {
+                this.keysHeldAtClick[k] = false;
+            }
+        }
+        int btnCount = 0;
+        try {
+            btnCount = Math.min(Mouse.getButtonCount(), this.mouseHeldAtClick.length);
+        } catch (Exception ignored) {
+        }
+        for (int b = 0; b < this.mouseHeldAtClick.length; b++) {
+            if (b < btnCount) {
+                try {
+                    this.mouseHeldAtClick[b] = Mouse.isButtonDown(b);
+                } catch (Exception ignored) {
+                    this.mouseHeldAtClick[b] = false;
+                }
+            } else {
+                this.mouseHeldAtClick[b] = false;
+            }
+        }
+    }
+
     @Override
     public void render(int mouseX, int mouseY, float tickDelta) {
         HitJumpConfig config = HitJumpConfig.getInstance();
 
-        if (this.waitingForKey) {
+        if (this.waitingForMenuKey) {
             for (int key = 1; key < 256; key++) {
                 boolean down;
                 try {
@@ -284,11 +329,61 @@ public class HitJumpConfigScreen extends Screen {
                         config.menuKeyCode = key;
                         HitJumpConfig.save();
                     }
-                    this.waitingForKey = false;
+                    this.waitingForMenuKey = false;
                     this.keybindButton.message = getKeybindLabel(config);
                     break;
                 } else if (!down) {
                     this.keysHeldAtClick[key] = false;
+                }
+            }
+        } else if (this.waitingForGodPlaceKey) {
+            boolean captured = false;
+
+            // Check keyboard keys
+            for (int key = 1; key < 256; key++) {
+                boolean down;
+                try {
+                    down = Keyboard.isKeyDown(key);
+                } catch (Exception ignored) {
+                    continue;
+                }
+                if (down && !this.keysHeldAtClick[key]) {
+                    if (key != Keyboard.KEY_ESCAPE) {
+                        config.godPlaceKeyCode = key;
+                        HitJumpConfig.save();
+                    }
+                    this.waitingForGodPlaceKey = false;
+                    this.godPlaceKeyButton.message = getGodPlaceKeyLabel(config);
+                    captured = true;
+                    break;
+                } else if (!down) {
+                    this.keysHeldAtClick[key] = false;
+                }
+            }
+
+            // Check mouse buttons (Middle Mouse, Right Click, Mouse 4/5, etc.; skips Left Click so UI stays clickable)
+            if (!captured) {
+                int btnCount = 0;
+                try {
+                    btnCount = Math.min(Mouse.getButtonCount(), this.mouseHeldAtClick.length);
+                } catch (Exception ignored) {
+                }
+                for (int b = 1; b < btnCount; b++) {
+                    boolean down;
+                    try {
+                        down = Mouse.isButtonDown(b);
+                    } catch (Exception ignored) {
+                        continue;
+                    }
+                    if (down && !this.mouseHeldAtClick[b]) {
+                        config.godPlaceKeyCode = -100 + b;
+                        HitJumpConfig.save();
+                        this.waitingForGodPlaceKey = false;
+                        this.godPlaceKeyButton.message = getGodPlaceKeyLabel(config);
+                        break;
+                    } else if (!down) {
+                        this.mouseHeldAtClick[b] = false;
+                    }
                 }
             }
         }
@@ -298,9 +393,9 @@ public class HitJumpConfigScreen extends Screen {
         int centerX = this.width / 2;
         int leftX = centerX - 105;
         int rightX = centerX + 105;
-        int startY = Math.max(22, (this.height - 224) / 2);
+        int startY = Math.max(24, (this.height - 196) / 2);
 
-        this.drawCenteredString(this.textRenderer, MENU_TITLE, centerX, startY - 15, 0xFFFFFF);
+        this.drawCenteredString(this.textRenderer, MENU_TITLE, centerX, startY - 16, 0xFFFFFF);
 
         // Left column labels
         this.drawCenteredString(
@@ -323,19 +418,19 @@ public class HitJumpConfigScreen extends Screen {
                 leftX, startY + 130, 0xE0E0E0
         );
 
-        // Right column labels
         int hitDelayMs = config.hitDelayTicks * 50;
         this.drawCenteredString(
                 this.textRenderer,
                 "Hit: " + config.hitDelayTicks + "t (" + hitDelayMs + " ms)",
-                rightX, startY + 30, 0xE0E0E0
+                leftX, startY + 182, 0xE0E0E0
         );
 
+        // Right column label
         int placeDelayMs = config.godPlaceDelayTicks * 50;
         this.drawCenteredString(
                 this.textRenderer,
                 "Place: " + config.godPlaceDelayTicks + "t (" + placeDelayMs + " ms)",
-                rightX, startY + 82, 0xE0E0E0
+                rightX, startY + 54, 0xE0E0E0
         );
 
         super.render(mouseX, mouseY, tickDelta);
@@ -366,6 +461,13 @@ public class HitJumpConfigScreen extends Screen {
         return "GodPlace: " + (config.godPlaceEnabled ? "ON" : "OFF");
     }
 
+    private String getGodPlaceKeyLabel(HitJumpConfig config) {
+        if (this.waitingForGodPlaceKey) {
+            return "GodPlace Key: > Press key/btn <";
+        }
+        return "GodPlace Key: " + formatBindName(config.godPlaceKeyCode);
+    }
+
     private String getHeadFixLabel(HitJumpConfig config) {
         return "1.7 Head Fix: " + (config.headFixEnabled ? "ON" : "OFF");
     }
@@ -379,13 +481,21 @@ public class HitJumpConfigScreen extends Screen {
     }
 
     private String getKeybindLabel(HitJumpConfig config) {
-        if (this.waitingForKey) {
+        if (this.waitingForMenuKey) {
             return "Menu Key: > Press any key <";
         }
-        String keyName = Keyboard.getKeyName(config.menuKeyCode);
-        if (keyName == null) {
-            keyName = "Key " + config.menuKeyCode;
+        return "Menu Key: " + formatBindName(config.menuKeyCode);
+    }
+
+    private String formatBindName(int code) {
+        if (code < 0) {
+            int btn = code + 100;
+            if (btn == 0) return "Left Click";
+            if (btn == 1) return "Right Click";
+            if (btn == 2) return "Middle Mouse";
+            return "Mouse " + (btn + 1);
         }
-        return "Menu Key: " + keyName;
+        String keyName = Keyboard.getKeyName(code);
+        return keyName != null ? keyName : ("Key " + code);
     }
 }
