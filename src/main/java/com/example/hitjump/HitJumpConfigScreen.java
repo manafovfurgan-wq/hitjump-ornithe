@@ -6,30 +6,39 @@ import org.lwjgl.input.Keyboard;
 
 public class HitJumpConfigScreen extends Screen {
     // Change this to whatever title you want at the top of the menu
-    private static final String MENU_TITLE = "HitJump & Delay Fixes";
+    private static final String MENU_TITLE = "HitJump & 1.8.9 PvP Fixes";
 
     private static final int BTN_HITJUMP_TOGGLE = 0;
-    private static final int BTN_FREQ_MINUS = 1;
-    private static final int BTN_FREQ_PLUS = 2;
-    private static final int BTN_LATENCY_MINUS = 3;
-    private static final int BTN_LATENCY_PLUS = 4;
+    private static final int BTN_HITJUMP_MODE = 1;
+    private static final int BTN_FREQ_MINUS = 2;
+    private static final int BTN_FREQ_PLUS = 3;
+    private static final int BTN_LATENCY_MINUS = 4;
+    private static final int BTN_LATENCY_PLUS = 5;
 
-    private static final int BTN_NOJUMPDELAY_TOGGLE = 5;
-    private static final int BTN_JUMPDELAY_MINUS = 6;
-    private static final int BTN_JUMPDELAY_PLUS = 7;
+    private static final int BTN_NOJUMPDELAY_TOGGLE = 6;
+    private static final int BTN_JUMPDELAY_MINUS = 7;
+    private static final int BTN_JUMPDELAY_PLUS = 8;
 
-    private static final int BTN_NOHITDELAY_TOGGLE = 8;
-    private static final int BTN_HITDELAY_MINUS = 9;
-    private static final int BTN_HITDELAY_PLUS = 10;
+    private static final int BTN_NOHITDELAY_TOGGLE = 9;
+    private static final int BTN_HITDELAY_MINUS = 10;
+    private static final int BTN_HITDELAY_PLUS = 11;
 
-    private static final int BTN_KEYBIND = 11;
-    private static final int BTN_RESET = 12;
-    private static final int BTN_DONE = 13;
+    private static final int BTN_HEADFIX_TOGGLE = 12;
+    private static final int BTN_SMOOTHSNEAK_TOGGLE = 13;
+    private static final int BTN_PARALLAX_TOGGLE = 14;
+
+    private static final int BTN_KEYBIND = 15;
+    private static final int BTN_RESET = 16;
+    private static final int BTN_DONE = 17;
 
     private final Screen parent;
     private ButtonWidget hitJumpToggleButton;
+    private ButtonWidget hitJumpModeButton;
     private ButtonWidget noJumpDelayToggleButton;
     private ButtonWidget noHitDelayToggleButton;
+    private ButtonWidget headFixToggleButton;
+    private ButtonWidget smoothSneakToggleButton;
+    private ButtonWidget parallaxToggleButton;
     private ButtonWidget keybindButton;
 
     private boolean waitingForKey = false;
@@ -48,9 +57,9 @@ public class HitJumpConfigScreen extends Screen {
         int centerX = this.width / 2;
         int leftX = centerX - 105;
         int rightX = centerX + 105;
-        int startY = Math.max(28, (this.height - 160) / 2);
+        int startY = Math.max(24, (this.height - 204) / 2);
 
-        // Left column: HitJump
+        // Left column: HitJump + NoJumpDelay
         this.hitJumpToggleButton = new ButtonWidget(
                 BTN_HITJUMP_TOGGLE,
                 leftX - 100, startY,
@@ -59,46 +68,78 @@ public class HitJumpConfigScreen extends Screen {
         );
         this.buttons.add(this.hitJumpToggleButton);
 
-        this.buttons.add(new ButtonWidget(BTN_FREQ_MINUS, leftX - 100, startY + 26, 40, 20, "-5%"));
-        this.buttons.add(new ButtonWidget(BTN_FREQ_PLUS, leftX + 60, startY + 26, 40, 20, "+5%"));
+        this.hitJumpModeButton = new ButtonWidget(
+                BTN_HITJUMP_MODE,
+                leftX - 100, startY + 24,
+                200, 20,
+                getHitJumpModeLabel(config)
+        );
+        this.buttons.add(this.hitJumpModeButton);
 
-        this.buttons.add(new ButtonWidget(BTN_LATENCY_MINUS, leftX - 100, startY + 52, 40, 20, "-1t"));
-        this.buttons.add(new ButtonWidget(BTN_LATENCY_PLUS, leftX + 60, startY + 52, 40, 20, "+1t"));
+        this.buttons.add(new ButtonWidget(BTN_FREQ_MINUS, leftX - 100, startY + 48, 40, 20, "-5%"));
+        this.buttons.add(new ButtonWidget(BTN_FREQ_PLUS, leftX + 60, startY + 48, 40, 20, "+5%"));
 
-        // Right column: NoJumpDelay & NoHitDelay
+        this.buttons.add(new ButtonWidget(BTN_LATENCY_MINUS, leftX - 100, startY + 72, 40, 20, "-1t"));
+        this.buttons.add(new ButtonWidget(BTN_LATENCY_PLUS, leftX + 60, startY + 72, 40, 20, "+1t"));
+
         this.noJumpDelayToggleButton = new ButtonWidget(
                 BTN_NOJUMPDELAY_TOGGLE,
-                rightX - 100, startY,
+                leftX - 100, startY + 100,
                 200, 20,
                 getNoJumpDelayLabel(config)
         );
         this.buttons.add(this.noJumpDelayToggleButton);
 
-        this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_MINUS, rightX - 100, startY + 26, 40, 20, "-1t"));
-        this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_PLUS, rightX + 60, startY + 26, 40, 20, "+1t"));
+        this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_MINUS, leftX - 100, startY + 124, 40, 20, "-1t"));
+        this.buttons.add(new ButtonWidget(BTN_JUMPDELAY_PLUS, leftX + 60, startY + 124, 40, 20, "+1t"));
 
+        // Right column: NoHitDelay + 1.7 Camera / Head / Eye Fixes
         this.noHitDelayToggleButton = new ButtonWidget(
                 BTN_NOHITDELAY_TOGGLE,
-                rightX - 100, startY + 56,
+                rightX - 100, startY,
                 200, 20,
                 getNoHitDelayLabel(config)
         );
         this.buttons.add(this.noHitDelayToggleButton);
 
-        this.buttons.add(new ButtonWidget(BTN_HITDELAY_MINUS, rightX - 100, startY + 82, 40, 20, "-1t"));
-        this.buttons.add(new ButtonWidget(BTN_HITDELAY_PLUS, rightX + 60, startY + 82, 40, 20, "+1t"));
+        this.buttons.add(new ButtonWidget(BTN_HITDELAY_MINUS, rightX - 100, startY + 24, 40, 20, "-1t"));
+        this.buttons.add(new ButtonWidget(BTN_HITDELAY_PLUS, rightX + 60, startY + 24, 40, 20, "+1t"));
+
+        this.headFixToggleButton = new ButtonWidget(
+                BTN_HEADFIX_TOGGLE,
+                rightX - 100, startY + 56,
+                200, 20,
+                getHeadFixLabel(config)
+        );
+        this.buttons.add(this.headFixToggleButton);
+
+        this.smoothSneakToggleButton = new ButtonWidget(
+                BTN_SMOOTHSNEAK_TOGGLE,
+                rightX - 100, startY + 80,
+                200, 20,
+                getSmoothSneakLabel(config)
+        );
+        this.buttons.add(this.smoothSneakToggleButton);
+
+        this.parallaxToggleButton = new ButtonWidget(
+                BTN_PARALLAX_TOGGLE,
+                rightX - 100, startY + 104,
+                200, 20,
+                getParallaxLabel(config)
+        );
+        this.buttons.add(this.parallaxToggleButton);
 
         // Bottom centered: Keybind, Reset, Save & Done
         this.keybindButton = new ButtonWidget(
                 BTN_KEYBIND,
-                centerX - 100, startY + 114,
+                centerX - 100, startY + 154,
                 200, 20,
                 getKeybindLabel(config)
         );
         this.buttons.add(this.keybindButton);
 
-        this.buttons.add(new ButtonWidget(BTN_RESET, centerX - 100, startY + 140, 95, 20, "Reset"));
-        this.buttons.add(new ButtonWidget(BTN_DONE, centerX + 5, startY + 140, 95, 20, "Save & Done"));
+        this.buttons.add(new ButtonWidget(BTN_RESET, centerX - 100, startY + 178, 95, 20, "Reset"));
+        this.buttons.add(new ButtonWidget(BTN_DONE, centerX + 5, startY + 178, 95, 20, "Save & Done"));
     }
 
     @Override
@@ -118,6 +159,10 @@ public class HitJumpConfigScreen extends Screen {
             case BTN_HITJUMP_TOGGLE:
                 config.enabled = !config.enabled;
                 this.hitJumpToggleButton.message = getHitJumpLabel(config);
+                break;
+            case BTN_HITJUMP_MODE:
+                config.hitJumpPlayersOnly = !config.hitJumpPlayersOnly;
+                this.hitJumpModeButton.message = getHitJumpModeLabel(config);
                 break;
             case BTN_FREQ_MINUS:
                 config.jumpFrequency = Math.max(0, config.jumpFrequency - 5);
@@ -151,6 +196,18 @@ public class HitJumpConfigScreen extends Screen {
             case BTN_HITDELAY_PLUS:
                 config.hitDelayTicks = Math.min(10, config.hitDelayTicks + 1);
                 break;
+            case BTN_HEADFIX_TOGGLE:
+                config.headFixEnabled = !config.headFixEnabled;
+                this.headFixToggleButton.message = getHeadFixLabel(config);
+                break;
+            case BTN_SMOOTHSNEAK_TOGGLE:
+                config.smoothSneakEnabled = !config.smoothSneakEnabled;
+                this.smoothSneakToggleButton.message = getSmoothSneakLabel(config);
+                break;
+            case BTN_PARALLAX_TOGGLE:
+                config.parallaxFixEnabled = !config.parallaxFixEnabled;
+                this.parallaxToggleButton.message = getParallaxLabel(config);
+                break;
             case BTN_KEYBIND:
                 this.waitingForKey = !this.waitingForKey;
                 if (this.waitingForKey) {
@@ -167,8 +224,12 @@ public class HitJumpConfigScreen extends Screen {
             case BTN_RESET:
                 config.resetDefaults();
                 this.hitJumpToggleButton.message = getHitJumpLabel(config);
+                this.hitJumpModeButton.message = getHitJumpModeLabel(config);
                 this.noJumpDelayToggleButton.message = getNoJumpDelayLabel(config);
                 this.noHitDelayToggleButton.message = getNoHitDelayLabel(config);
+                this.headFixToggleButton.message = getHeadFixLabel(config);
+                this.smoothSneakToggleButton.message = getSmoothSneakLabel(config);
+                this.parallaxToggleButton.message = getParallaxLabel(config);
                 this.keybindButton.message = getKeybindLabel(config);
                 break;
             case BTN_DONE:
@@ -211,37 +272,37 @@ public class HitJumpConfigScreen extends Screen {
         int centerX = this.width / 2;
         int leftX = centerX - 105;
         int rightX = centerX + 105;
-        int startY = Math.max(28, (this.height - 160) / 2);
+        int startY = Math.max(24, (this.height - 204) / 2);
 
-        this.drawCenteredString(this.textRenderer, MENU_TITLE, centerX, startY - 20, 0xFFFFFF);
+        this.drawCenteredString(this.textRenderer, MENU_TITLE, centerX, startY - 16, 0xFFFFFF);
 
         // Left column labels
         this.drawCenteredString(
                 this.textRenderer,
                 "Frequency: " + config.jumpFrequency + "%",
-                leftX, startY + 32, 0xE0E0E0
+                leftX, startY + 54, 0xE0E0E0
         );
 
         int latencyMs = config.latencyTicks * 50;
         this.drawCenteredString(
                 this.textRenderer,
                 "Latency: " + config.latencyTicks + "t (" + latencyMs + " ms)",
-                leftX, startY + 58, 0xE0E0E0
+                leftX, startY + 78, 0xE0E0E0
         );
 
-        // Right column labels
         int jumpDelayMs = config.jumpDelayTicks * 50;
         this.drawCenteredString(
                 this.textRenderer,
                 "Jump: " + config.jumpDelayTicks + "t (" + jumpDelayMs + " ms)",
-                rightX, startY + 32, 0xE0E0E0
+                leftX, startY + 130, 0xE0E0E0
         );
 
+        // Right column labels
         int hitDelayMs = config.hitDelayTicks * 50;
         this.drawCenteredString(
                 this.textRenderer,
                 "Hit: " + config.hitDelayTicks + "t (" + hitDelayMs + " ms)",
-                rightX, startY + 88, 0xE0E0E0
+                rightX, startY + 30, 0xE0E0E0
         );
 
         super.render(mouseX, mouseY, tickDelta);
@@ -256,12 +317,28 @@ public class HitJumpConfigScreen extends Screen {
         return "HitJump: " + (config.enabled ? "ON" : "OFF");
     }
 
+    private String getHitJumpModeLabel(HitJumpConfig config) {
+        return "Target: " + (config.hitJumpPlayersOnly ? "Players Only" : "All Knockback");
+    }
+
     private String getNoJumpDelayLabel(HitJumpConfig config) {
         return "NoJumpDelay: " + (config.noJumpDelayEnabled ? "ON" : "OFF");
     }
 
     private String getNoHitDelayLabel(HitJumpConfig config) {
         return "NoHitDelay: " + (config.noHitDelayEnabled ? "ON" : "OFF");
+    }
+
+    private String getHeadFixLabel(HitJumpConfig config) {
+        return "1.7 Head Fix: " + (config.headFixEnabled ? "ON" : "OFF");
+    }
+
+    private String getSmoothSneakLabel(HitJumpConfig config) {
+        return "1.7 Smooth Sneak: " + (config.smoothSneakEnabled ? "ON" : "OFF");
+    }
+
+    private String getParallaxLabel(HitJumpConfig config) {
+        return "Parallax Fix: " + (config.parallaxFixEnabled ? "ON" : "OFF");
     }
 
     private String getKeybindLabel(HitJumpConfig config) {
