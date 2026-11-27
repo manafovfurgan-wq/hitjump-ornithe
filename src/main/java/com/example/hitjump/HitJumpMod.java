@@ -17,6 +17,9 @@ public class HitJumpMod implements ClientModInitializer {
     private static Field hurtTimeField = null;
     private static boolean hurtTimeSearched = false;
 
+    private static Field jumpTicksField = null;
+    private static boolean jumpTicksSearched = false;
+
     @Override
     public void onInitializeClient() {
         HitJumpConfig.load();
@@ -36,7 +39,19 @@ public class HitJumpMod implements ClientModInitializer {
         }
         wasMenuKeyDown = isMenuKeyDown;
 
-        if (!config.enabled || client.player == null || client.world == null) {
+        if (client.player == null || client.world == null) {
+            lastHurtTime = 0;
+            pendingJumpTicks = -1;
+            return;
+        }
+
+        // NoJumpDelay: clamp vanilla's 10-tick jump cooldown before movement ticks
+        if (config.noJumpDelayEnabled) {
+            applyNoJumpDelay(client.player, config.jumpDelayTicks);
+        }
+
+        // HitJump: jump on damage based on frequency and latency
+        if (!config.enabled) {
             lastHurtTime = 0;
             pendingJumpTicks = -1;
             return;
@@ -74,6 +89,46 @@ public class HitJumpMod implements ClientModInitializer {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
+        if (!jumpTicksSearched) {
+            jumpTicksField = findJumpTicksField(player.getClass());
+            jumpTicksSearched = true;
+        }
+        if (jumpTicksField != null) {
+            try {
+                int currentDelay = jumpTicksField.getInt(player);
+                if (currentDelay > maxDelayTicks) {
+                    jumpTicksField.setInt(player, maxDelayTicks);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static Field findJumpTicksField(Class<?> startClass) {
+        Class<?> cls = startClass;
+        while (cls != null && cls != Object.class) {
+            Field[] fields = cls.getDeclaredFields();
+            // Matches vanilla 1.8.9 LivingEntity layout around jumpTicks:
+            // boolean, LivingEntity, int, LivingEntity, int, float, int (jumpTicks), float
+            for (int i = 0; i <= fields.length - 8; i++) {
+                if (isInstanceField(fields[i], boolean.class)
+                        && isInstanceField(fields[i + 1], cls)
+                        && isInstanceField(fields[i + 2], int.class)
+                        && isInstanceField(fields[i + 3], cls)
+                        && isInstanceField(fields[i + 4], int.class)
+                        && isInstanceField(fields[i + 5], float.class)
+                        && isInstanceField(fields[i + 6], int.class)
+                        && isInstanceField(fields[i + 7], float.class)) {
+                    fields[i + 6].setAccessible(true);
+                    return fields[i + 6];
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
     }
 
     private static int getHurtTime(Object player) {
