@@ -4,7 +4,8 @@
   "package": "com.example.hitjump.mixin",
   "compatibilityLevel": "JAVA_8",
   "client": [
-    "MinecraftTickMixin"
+    "MinecraftTickMixin",
+    "GameRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1
