@@ -4,6 +4,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screen.Screen;
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
 import java.lang.reflect.Field;
@@ -22,6 +23,9 @@ public class HitJumpMod implements ClientModInitializer {
     private static boolean wasOnGround = true;
     private static boolean wasMenuKeyDown = false;
 
+    // GodPlace state
+    private static boolean godPlaceForcingUseKey = false;
+
     // 1.7 Smooth Sneak state
     private static float smoothEyeHeight = -1.0F;
     private static long lastCameraTimeNanos = 0L;
@@ -38,6 +42,13 @@ public class HitJumpMod implements ClientModInitializer {
 
     private static Field rightClickDelayField = null;
     private static boolean rightClickDelaySearched = false;
+
+    private static boolean keyBindingsSearched = false;
+    private static Object useKeyBindingObj = null;
+    private static Object pickKeyBindingObj = null;
+    private static Field keyBindingKeyCodeField = null;
+    private static Field keyBindingPressedField = null;
+    private static Field keyBindingPressTimeField = null;
 
     private static boolean entityMotionSearched = false;
     private static Field entityXField = null;
@@ -80,6 +91,7 @@ public class HitJumpMod implements ClientModInitializer {
         wasMenuKeyDown = isMenuKeyDown;
 
         if (client.player == null || client.world == null) {
+            releaseForcedUseKey(true);
             lastHurtTime = 0;
             pendingJumpTicks = -1;
             recentCombatHurtWindow = 0;
@@ -93,9 +105,21 @@ public class HitJumpMod implements ClientModInitializer {
             syncHeadYawInternal(client);
         }
 
-        // GodPlace: clear right-click cooldown immediately when set to 0t
-        if (config.godPlaceEnabled && config.godPlaceDelayTicks == 0) {
-            applyGodPlace(client, 0);
+        // GodPlace: ONLY active while the dedicated GodPlace keybind (default: Middle Mouse) is held.
+        // Regular Right Click (Mouse Button 2) stays 100% vanilla.
+        boolean godPlaceActive = config.godPlaceEnabled
+                && client.screen == null
+                && isBindDown(config.godPlaceKeyCode);
+
+        if (godPlaceActive) {
+            ensureKeyBindingFields(client);
+            setUseKeyPressed(true);
+            godPlaceForcingUseKey = true;
+            if (config.godPlaceDelayTicks == 0) {
+                applyGodPlace(client, 0);
+            }
+        } else if (godPlaceForcingUseKey) {
+            releaseForcedUseKey(client.screen != null);
         }
 
         // NoHitDelay: clamp vanilla's 10-tick miss penalty (never touching GUI-close 10000 lock)
@@ -158,12 +182,29 @@ public class HitJumpMod implements ClientModInitializer {
             return;
         }
         HitJumpConfig config = HitJumpConfig.getInstance();
-        if (config.godPlaceEnabled) {
+        if (config.godPlaceEnabled && client.screen == null && isBindDown(config.godPlaceKeyCode)) {
             applyGodPlace(client, config.godPlaceDelayTicks);
+            clearPickKeyPressTimeIfShared(client, config.godPlaceKeyCode);
         }
         if (config.headFixEnabled) {
             syncHeadYawInternal(client);
         }
+    }
+
+    public static boolean shouldBlockPickBlock() {
+        if (cachedClient == null || cachedClient.player == null || cachedClient.screen != null) {
+            return false;
+        }
+        HitJumpConfig config = HitJumpConfig.getInstance();
+        if (!config.godPlaceEnabled) {
+            return false;
+        }
+        ensureKeyBindingFields(cachedClient);
+        int pickCode = getPickKeyCode();
+        if (pickCode != 0 && config.godPlaceKeyCode == pickCode) {
+            return true;
+        }
+        return isBindDown(config.godPlaceKeyCode);
     }
 
     public static void onBeforeAttack(Minecraft client) {
@@ -252,6 +293,167 @@ public class HitJumpMod implements ClientModInitializer {
         }
     }
 
+    public static boolean isBindDown(int bindCode) {
+        if (bindCode < 0) {
+            int button = bindCode + 100;
+            if (button < 0) {
+                return false;
+            }
+            try {
+                if (button < Mouse.getButtonCount()) {
+                    return Mouse.isButtonDown(button);
+                }
+            } catch (Exception ignored) {
+            }
+            return false;
+        }
+        return isKeyDownSafe(bindCode);
+    }
+
+    private static void releaseForcedUseKey(boolean forceOff) {
+        if (!godPlaceForcingUseKey) {
+            return;
+        }
+        boolean physicallyHeld = !forceOff && isBindDown(getUseKeyCode());
+        setUseKeyPressed(physicallyHeld);
+        godPlaceForcingUseKey = false;
+    }
+
+    private static void setUseKeyPressed(boolean pressed) {
+        if (useKeyBindingObj != null && keyBindingPressedField != null) {
+            try {
+                keyBindingPressedField.setBoolean(useKeyBindingObj, pressed);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static int getUseKeyCode() {
+        if (useKeyBindingObj != null && keyBindingKeyCodeField != null) {
+            try {
+                return keyBindingKeyCodeField.getInt(useKeyBindingObj);
+            } catch (Exception ignored) {
+            }
+        }
+        return -99; // Default Right Click
+    }
+
+    private static int getPickKeyCode() {
+        if (pickKeyBindingObj != null && keyBindingKeyCodeField != null) {
+            try {
+                return keyBindingKeyCodeField.getInt(pickKeyBindingObj);
+            } catch (Exception ignored) {
+            }
+        }
+        return -98; // Default Middle Mouse
+    }
+
+    private static void clearPickKeyPressTimeIfShared(Minecraft client, int godPlaceKeyCode) {
+        ensureKeyBindingFields(client);
+        if (pickKeyBindingObj != null && keyBindingPressTimeField != null && getPickKeyCode() == godPlaceKeyCode) {
+            try {
+                keyBindingPressTimeField.setInt(pickKeyBindingObj, 0);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static void ensureKeyBindingFields(Minecraft client) {
+        if (keyBindingsSearched) {
+            return;
+        }
+        keyBindingsSearched = true;
+        for (Field clientField : client.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(clientField.getModifiers()) || clientField.getType().isPrimitive()) continue;
+            Object maybeOptions;
+            try {
+                clientField.setAccessible(true);
+                maybeOptions = clientField.get(client);
+            } catch (Exception ignored) {
+                continue;
+            }
+            if (maybeOptions == null || maybeOptions.getClass().isArray()) continue;
+
+            for (Field optField : maybeOptions.getClass().getDeclaredFields()) {
+                if (Modifier.isStatic(optField.getModifiers()) || optField.getType().isPrimitive()) continue;
+                Object val;
+                try {
+                    optField.setAccessible(true);
+                    val = optField.get(maybeOptions);
+                } catch (Exception ignored) {
+                    continue;
+                }
+                if (val == null || val.getClass().isArray()) continue;
+                String desc = getKeyBindingDescription(val);
+                if ("key.use".equals(desc)) {
+                    useKeyBindingObj = val;
+                    locateKeyBindingInternalFields(val.getClass());
+                } else if ("key.pickItem".equals(desc)) {
+                    pickKeyBindingObj = val;
+                    locateKeyBindingInternalFields(val.getClass());
+                }
+            }
+            if (useKeyBindingObj != null) {
+                return;
+            }
+        }
+    }
+
+    private static String getKeyBindingDescription(Object obj) {
+        Field[] fields = obj.getClass().getDeclaredFields();
+        if (fields.length > 20) {
+            return null;
+        }
+        for (Field f : fields) {
+            if (isInstanceField(f, String.class)) {
+                try {
+                    f.setAccessible(true);
+                    Object s = f.get(obj);
+                    if ("key.use".equals(s) || "key.pickItem".equals(s)) {
+                        return (String) s;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return null;
+    }
+
+    private static void locateKeyBindingInternalFields(Class<?> keyBindingClass) {
+        if (keyBindingPressedField != null && keyBindingKeyCodeField != null) {
+            return;
+        }
+        Field[] fields = keyBindingClass.getDeclaredFields();
+        // Matches vanilla 1.8.9 KeyBinding layout: int keyCode (non-final), boolean pressed, int pressTime
+        for (int i = 0; i < fields.length - 1; i++) {
+            if (isInstanceField(fields[i], int.class)
+                    && !Modifier.isFinal(fields[i].getModifiers())
+                    && isInstanceField(fields[i + 1], boolean.class)) {
+                keyBindingKeyCodeField = fields[i];
+                keyBindingPressedField = fields[i + 1];
+                keyBindingKeyCodeField.setAccessible(true);
+                keyBindingPressedField.setAccessible(true);
+                if (i + 2 < fields.length && isInstanceField(fields[i + 2], int.class)) {
+                    keyBindingPressTimeField = fields[i + 2];
+                    keyBindingPressTimeField.setAccessible(true);
+                }
+                return;
+            }
+        }
+        // Fallback if layout differs
+        for (Field f : fields) {
+            if (keyBindingPressedField == null && isInstanceField(f, boolean.class)) {
+                keyBindingPressedField = f;
+                keyBindingPressedField.setAccessible(true);
+            } else if (keyBindingKeyCodeField == null
+                    && isInstanceField(f, int.class)
+                    && !Modifier.isFinal(f.getModifiers())) {
+                keyBindingKeyCodeField = f;
+                keyBindingKeyCodeField.setAccessible(true);
+            }
+        }
+    }
+
     private static void applyGodPlace(Minecraft client, int delayTicks) {
         if (!rightClickDelaySearched) {
             rightClickDelayField = findRightClickDelayField(client.getClass());
@@ -272,9 +474,6 @@ public class HitJumpMod implements ClientModInitializer {
 
     private static Field findRightClickDelayField(Class<?> minecraftClass) {
         Field[] fields = minecraftClass.getDeclaredFields();
-        // Matches vanilla 1.8.9 Minecraft layout around rightClickDelayTimer:
-        // int (rightClickDelayTimer), String (serverName), int (serverPort),
-        // boolean (inGameHasFocus), long (systemTime), int (joinPlayerCounter)
         for (int i = 0; i <= fields.length - 6; i++) {
             if (isInstanceField(fields[i], int.class)
                     && isInstanceField(fields[i + 1], String.class)
