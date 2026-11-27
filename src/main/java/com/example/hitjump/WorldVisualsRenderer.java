@@ -1,0 +1,1043 @@
+package com.example.hitjump;
+
+import net.minecraft.client.Minecraft;
+import org.lwjgl.opengl.GL11;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+
+public class WorldVisualsRenderer {
+    private static final FloatBuffer PROJECTION_MATRIX = ByteBuffer.allocateDirect(16 * 4)
+            .order(ByteOrder.nativeOrder()).asFloatBuffer();
+    private static final FloatBuffer MODELVIEW_MATRIX = ByteBuffer.allocateDirect(16 * 4)
+            .order(ByteOrder.nativeOrder()).asFloatBuffer();
+    private static boolean cameraCapturedThisFrame = false;
+
+    private static boolean boxFieldsSearched = false;
+    private static Field boxMinXField = null;
+    private static Field boxMinYField = null;
+    private static Field boxMinZField = null;
+    private static Field boxMaxXField = null;
+    private static Field boxMaxYField = null;
+    private static Field boxMaxZField = null;
+
+    private static boolean nameAccessSearched = false;
+    private static Field dataWatcherField = null;
+    private static Method dataWatcherGetByteMethod = null;
+    private static Method dataWatcherGetStringMethod = null;
+    private static Field gameProfileField = null;
+    private static Method gameProfileGetNameMethod = null;
+    private static Method entityGetDisplayNameMethod = null;
+    private static Method entityGetInventoryMethod = null;
+    private static Method textFormattedMethod = null;
+    private static boolean textFormattedSearched = false;
+
+    private static boolean itemStackNbtSearched = false;
+    private static Field itemStackNbtField = null;
+
+    private static boolean tntClassChecked = false;
+    private static Class<?> tntEntityClass = null;
+    private static Field tntFuseField = null;
+
+    private static boolean textRendererSearched = false;
+    private static Object textRendererObj = null;
+    private static Method textGetWidthMethod = null;
+    private static Method textDrawShadowMethod = null;
+
+    private static class TagRenderEntry {
+        final String distanceLine;
+        final String nameLine;
+        final String armorLine;
+        final String tntLine;
+        final int tntColor;
+        final double relX;
+        final double relY;
+        final double relZ;
+        final double distSq;
+
+        TagRenderEntry(
+                String distanceLine,
+                String nameLine,
+                String armorLine,
+                String tntLine,
+                int tntColor,
+                double relX, double relY, double relZ, double distSq
+        ) {
+            this.distanceLine = distanceLine;
+            this.nameLine = nameLine;
+            this.armorLine = armorLine;
+            this.tntLine = tntLine;
+            this.tntColor = tntColor;
+            this.relX = relX;
+            this.relY = relY;
+            this.relZ = relZ;
+            this.distSq = distSq;
+        }
+    }
+
+    private static class HitOverlayEntry {
+        final double minX, minY, minZ, maxX, maxY, maxZ;
+        final float alphaScale;
+
+        HitOverlayEntry(double minX, double minY, double minZ, double maxX, double maxY, double maxZ, float alphaScale) {
+            this.minX = minX;
+            this.minY = minY;
+            this.minZ = minZ;
+            this.maxX = maxX;
+            this.maxY = maxY;
+            this.maxZ = maxZ;
+            this.alphaScale = alphaScale;
+        }
+    }
+
+    public static void captureCameraMatrices() {
+        PROJECTION_MATRIX.clear();
+        MODELVIEW_MATRIX.clear();
+        GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, PROJECTION_MATRIX);
+        GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, MODELVIEW_MATRIX);
+        cameraCapturedThisFrame = true;
+    }
+
+    public static void onRenderWorldTail(Minecraft client, float tickDelta) {
+        if (!cameraCapturedThisFrame || client == null || client.player == null || client.world == null) {
+            return;
+        }
+        cameraCapturedThisFrame = false;
+
+        HitJumpConfig config = HitJumpConfig.getInstance();
+        boolean needHitboxPass = config.wallHitboxesEnabled || config.hitboxEyeLineEnabled;
+        boolean needTagPass = config.wallNametagsEnabled || config.armorEnchantInfoEnabled || config.tntTimerEnabled;
+        boolean needHitColorPass = config.customHitColorEnabled;
+
+        if (!needHitboxPass && !needTagPass && !needHitColorPass) {
+            return;
+        }
+
+        Object player = client.player;
+        HitJumpMod.ensureEntityMotionFields(player);
+        ensureNameAccessFields(player);
+        ensureTextRenderer(client);
+
+        if (HitJumpMod.entityXField == null || HitJumpMod.entityPrevXField == null || HitJumpMod.entityBoxField == null) {
+            return;
+        }
+
+        List<?> entities = getLoadedEntityList(client);
+        if (entities == null || entities.isEmpty()) {
+            return;
+        }
+
+        Class<?> playerBaseClass = HitJumpMod.getPlayerBaseClass(player);
+        Class<?> livingBaseClass = HitJumpMod.getLivingBaseClass(player);
+        Class<?> entityBaseClass = HitJumpMod.getEntityBaseClass(player);
+
+        double camX;
+        double camY;
+        double camZ;
+        float viewYaw;
+        float viewPitch;
+        try {
+            double pPrevX = HitJumpMod.entityPrevXField.getDouble(player);
+            double pPrevY = HitJumpMod.entityPrevYField.getDouble(player);
+            double pPrevZ = HitJumpMod.entityPrevZField.getDouble(player);
+            camX = pPrevX + (HitJumpMod.entityXField.getDouble(player) - pPrevX) * tickDelta;
+            camY = pPrevY + (HitJumpMod.entityYField.getDouble(player) - pPrevY) * tickDelta;
+            camZ = pPrevZ + (HitJumpMod.entityZField.getDouble(player) - pPrevZ) * tickDelta;
+
+            float pPrevYaw = HitJumpMod.entityPrevYawField.getFloat(player);
+            float pYaw = HitJumpMod.entityYawField.getFloat(player);
+            float pPrevPitch = HitJumpMod.entityPrevPitchField.getFloat(player);
+            float pPitch = HitJumpMod.entityPitchField.getFloat(player);
+            viewYaw = pPrevYaw + (pYaw - pPrevYaw) * tickDelta;
+            viewPitch = pPrevPitch + (pPitch - pPrevPitch) * tickDelta;
+
+            if (HitJumpMod.getPerspective(client) == 2) {
+                viewYaw += 180.0F;
+                viewPitch = -viewPitch;
+            }
+        } catch (Exception ignored) {
+            return;
+        }
+
+        double hitboxMaxDistSq = (double) config.hitboxRange * (double) config.hitboxRange;
+        double nametagMaxDistSq = (double) config.nametagRange * (double) config.nametagRange;
+
+        List<TagRenderEntry> tagsToRender = needTagPass ? new ArrayList<TagRenderEntry>() : null;
+        List<HitOverlayEntry> hitOverlays = needHitColorPass ? new ArrayList<HitOverlayEntry>() : null;
+
+        float invisR = ((config.invisHitboxColor >> 16) & 0xFF) / 255.0F;
+        float invisG = ((config.invisHitboxColor >> 8) & 0xFF) / 255.0F;
+        float invisB = (config.invisHitboxColor & 0xFF) / 255.0F;
+
+        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        GL11.glMatrixMode(GL11.GL_PROJECTION);
+        GL11.glPushMatrix();
+        PROJECTION_MATRIX.clear();
+        GL11.glLoadMatrix(PROJECTION_MATRIX);
+
+        GL11.glMatrixMode(GL11.GL_MODELVIEW);
+        GL11.glPushMatrix();
+        MODELVIEW_MATRIX.clear();
+        GL11.glLoadMatrix(MODELVIEW_MATRIX);
+
+        try {
+            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glDisable(GL11.GL_FOG);
+            GL11.glDisable(GL11.GL_CULL_FACE);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+
+            // Through-wall hitbox pass
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            GL11.glDepthMask(false);
+            if (needHitboxPass) {
+                GL11.glDisable(GL11.GL_TEXTURE_2D);
+                GL11.glLineWidth(1.5F);
+            }
+
+            int count = entities.size();
+            for (int i = 0; i < count; i++) {
+                Object entity;
+                try {
+                    entity = entities.get(i);
+                } catch (Exception ignored) {
+                    break;
+                }
+                if (entity == null || entity == player) {
+                    continue;
+                }
+                if (HitJumpMod.isEntityDead(entity)) {
+                    continue;
+                }
+
+                boolean isPlayer = playerBaseClass != null && playerBaseClass.isInstance(entity);
+                boolean isLiving = livingBaseClass != null && livingBaseClass.isInstance(entity);
+                boolean isTnt = isPrimedTnt(entity, entityBaseClass, livingBaseClass);
+
+                double ex;
+                double ey;
+                double ez;
+                double interpX;
+                double interpY;
+                double interpZ;
+                Object boxObj;
+                try {
+                    ex = HitJumpMod.entityXField.getDouble(entity);
+                    ey = HitJumpMod.entityYField.getDouble(entity);
+                    ez = HitJumpMod.entityZField.getDouble(entity);
+
+                    double prevX = (HitJumpMod.entityLastTickXField != null)
+                            ? HitJumpMod.entityLastTickXField.getDouble(entity)
+                            : HitJumpMod.entityPrevXField.getDouble(entity);
+                    double prevY = (HitJumpMod.entityLastTickYField != null)
+                            ? HitJumpMod.entityLastTickYField.getDouble(entity)
+                            : HitJumpMod.entityPrevYField.getDouble(entity);
+                    double prevZ = (HitJumpMod.entityLastTickZField != null)
+                            ? HitJumpMod.entityLastTickZField.getDouble(entity)
+                            : HitJumpMod.entityPrevZField.getDouble(entity);
+
+                    interpX = prevX + (ex - prevX) * tickDelta;
+                    interpY = prevY + (ey - prevY) * tickDelta;
+                    interpZ = prevZ + (ez - prevZ) * tickDelta;
+                    boxObj = HitJumpMod.entityBoxField.get(entity);
+                } catch (Exception ignored) {
+                    continue;
+                }
+
+                double relX = interpX - camX;
+                double relY = interpY - camY;
+                double relZ = interpZ - camZ;
+                double distSq = relX * relX + relY * relY + relZ * relZ;
+
+                double boxHeight = 1.8D;
+                boolean hasValidBox = false;
+                double bMinX = 0, bMinY = 0, bMinZ = 0, bMaxX = 0, bMaxY = 0, bMaxZ = 0;
+
+                if (boxObj != null) {
+                    ensureBoxFields(boxObj);
+                    if (boxMinXField != null) {
+                        try {
+                            double shiftX = interpX - ex - camX;
+                            double shiftY = interpY - ey - camY;
+                            double shiftZ = interpZ - ez - camZ;
+                            bMinX = boxMinXField.getDouble(boxObj) + shiftX;
+                            bMinY = boxMinYField.getDouble(boxObj) + shiftY;
+                            bMinZ = boxMinZField.getDouble(boxObj) + shiftZ;
+                            bMaxX = boxMaxXField.getDouble(boxObj) + shiftX;
+                            bMaxY = boxMaxYField.getDouble(boxObj) + shiftY;
+                            bMaxZ = boxMaxZField.getDouble(boxObj) + shiftZ;
+                            double bw = bMaxX - bMinX;
+                            double bh = bMaxY - bMinY;
+                            if (bh > 0.01D) {
+                                boxHeight = bh;
+                            }
+                            hasValidBox = (bw > 0.01D && bh > 0.01D);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+
+                // 1. Through-wall Hitbox & Separated Eye Line
+                if (needHitboxPass && hasValidBox && distSq <= hitboxMaxDistSq) {
+                    boolean targetMatch;
+                    if (config.hitboxTargetMode == 1) {
+                        targetMatch = isPlayer;
+                    } else if (config.hitboxTargetMode == 0) {
+                        targetMatch = isLiving;
+                    } else {
+                        targetMatch = true;
+                    }
+                    if (targetMatch) {
+                        boolean invisible = isEntityInvisible(entity);
+                        drawHitboxAndEyeLine(
+                                bMinX, bMinY, bMinZ, bMaxX, bMaxY, bMaxZ,
+                                isPlayer, isLiving,
+                                config.wallHitboxesEnabled,
+                                config.hitboxEyeLineEnabled,
+                                invisible && config.invisHitboxEnabled,
+                                invisR, invisG, invisB
+                        );
+                    }
+                }
+
+                // 2. Collect Custom Hit Color overlays for damaged living entities
+                if (hitOverlays != null && isLiving && hasValidBox && distSq <= hitboxMaxDistSq) {
+                    int ht = HitJumpMod.getHurtTime(entity);
+                    if (ht > 0) {
+                        float fade = Math.min(1.0F, ht / 10.0F);
+                        hitOverlays.add(new HitOverlayEntry(
+                                bMinX - 0.015D, bMinY - 0.015D, bMinZ - 0.015D,
+                                bMaxX + 0.015D, bMaxY + 0.015D, bMaxZ + 0.015D,
+                                fade
+                        ));
+                    }
+                }
+
+                // 3. Collect Tags (TNT Fuse Timer, Wall Nametags, Distance Tag, Armor Enchant Info)
+                if (tagsToRender != null && distSq <= nametagMaxDistSq) {
+                    if (isTnt && config.tntTimerEnabled) {
+                        int fuse = getTntFuse(entity);
+                        if (fuse >= 0 && fuse <= 200) {
+                            float secs = Math.max(0.0F, (fuse - tickDelta) / 20.0F);
+                            String tntStr = String.format("TNT %.1fs", secs);
+                            int color = (secs > 2.5F) ? 0xFF55FF55 : (secs > 1.0F ? 0xFFFFFF55 : 0xFFFF5555);
+                            double tagY = hasValidBox ? (bMaxY + 0.35D) : (relY + 1.15D);
+                            tagsToRender.add(new TagRenderEntry(null, null, null, tntStr, color, relX, tagY, relZ, distSq));
+                        }
+                    } else {
+                        String nameLine = config.wallNametagsEnabled ? getEntityTagLabel(entity, isPlayer) : null;
+                        String armorLine = (config.armorEnchantInfoEnabled && isLiving) ? getArmorEnchantSummary(entity) : null;
+
+                        String distLine = null;
+                        if (config.showDistanceTag && (nameLine != null || armorLine != null)) {
+                            int distInt = (int) Math.round(Math.sqrt(distSq));
+                            distLine = distInt + (config.distanceUnitBlocks ? "B" : "M");
+                        }
+
+                        if (nameLine != null || armorLine != null) {
+                            double tagY = hasValidBox ? (bMaxY + 0.45D) : (relY + boxHeight + 0.45D);
+                            tagsToRender.add(new TagRenderEntry(
+                                    distLine, nameLine, armorLine, null, 0xFFFFFFFF,
+                                    relX, tagY, relZ, distSq
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // 4. Depth-tested Custom Hit Color overlays (wraps damaged entities cleanly without bleeding through walls)
+            if (hitOverlays != null && !hitOverlays.isEmpty() && config.customHitOpacity > 0) {
+                GL11.glDisable(GL11.GL_TEXTURE_2D);
+                GL11.glEnable(GL11.GL_DEPTH_TEST);
+                GL11.glDepthFunc(GL11.GL_LEQUAL);
+                GL11.glDepthMask(false);
+
+                float hr = ((config.customHitColor >> 16) & 0xFF) / 255.0F;
+                float hg = ((config.customHitColor >> 8) & 0xFF) / 255.0F;
+                float hb = (config.customHitColor & 0xFF) / 255.0F;
+                float baseAlpha = config.customHitOpacity / 100.0F;
+
+                for (int i = 0; i < hitOverlays.size(); i++) {
+                    HitOverlayEntry h = hitOverlays.get(i);
+                    float a = baseAlpha * h.alphaScale;
+                    if (a > 0.01F) {
+                        drawFilledBox(h.minX, h.minY, h.minZ, h.maxX, h.maxY, h.maxZ, hr, hg, hb, a);
+                    }
+                }
+                GL11.glDisable(GL11.GL_DEPTH_TEST);
+            }
+
+            // 5. Render Nametags, Distance Tags, Armor Enchantments & TNT Timers (farthest-to-nearest)
+            if (tagsToRender != null && !tagsToRender.isEmpty() && textRendererObj != null) {
+                Collections.sort(tagsToRender, new Comparator<TagRenderEntry>() {
+                    @Override
+                    public int compare(TagRenderEntry a, TagRenderEntry b) {
+                        return Double.compare(b.distSq, a.distSq);
+                    }
+                });
+
+                float bgR = ((config.nametagBgColor >> 16) & 0xFF) / 255.0F;
+                float bgG = ((config.nametagBgColor >> 8) & 0xFF) / 255.0F;
+                float bgB = (config.nametagBgColor & 0xFF) / 255.0F;
+                float bgA = config.nametagBgOpacity / 100.0F;
+
+                for (int i = 0; i < tagsToRender.size(); i++) {
+                    drawWorldTagStack(tagsToRender.get(i), viewYaw, viewPitch, bgR, bgG, bgB, bgA);
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            GL11.glMatrixMode(GL11.GL_PROJECTION);
+            GL11.glPopMatrix();
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glPopMatrix();
+            GL11.glPopAttrib();
+        }
+    }
+
+    private static void drawHitboxAndEyeLine(
+            double minX, double minY, double minZ,
+            double maxX, double maxY, double maxZ,
+            boolean isPlayer, boolean isLiving,
+            boolean drawBox, boolean drawEyeLine,
+            boolean useInvisColor,
+            float invisR, float invisG, float invisB
+    ) {
+        if (drawBox) {
+            if (useInvisColor) {
+                GL11.glColor4f(invisR, invisG, invisB, 0.98F);
+            } else if (isPlayer) {
+                GL11.glColor4f(1.0F, 1.0F, 1.0F, 0.95F);
+            } else {
+                GL11.glColor4f(0.85F, 0.92F, 1.0F, 0.78F);
+            }
+
+            GL11.glBegin(GL11.GL_LINES);
+            // Bottom face
+            GL11.glVertex3d(minX, minY, minZ); GL11.glVertex3d(maxX, minY, minZ);
+            GL11.glVertex3d(maxX, minY, minZ); GL11.glVertex3d(maxX, minY, maxZ);
+            GL11.glVertex3d(maxX, minY, maxZ); GL11.glVertex3d(minX, minY, maxZ);
+            GL11.glVertex3d(minX, minY, maxZ); GL11.glVertex3d(minX, minY, minZ);
+
+            // Top face
+            GL11.glVertex3d(minX, maxY, minZ); GL11.glVertex3d(maxX, maxY, minZ);
+            GL11.glVertex3d(maxX, maxY, minZ); GL11.glVertex3d(maxX, maxY, maxZ);
+            GL11.glVertex3d(maxX, maxY, maxZ); GL11.glVertex3d(minX, maxY, maxZ);
+            GL11.glVertex3d(minX, maxY, maxZ); GL11.glVertex3d(minX, maxY, minZ);
+
+            // Vertical edges
+            GL11.glVertex3d(minX, minY, minZ); GL11.glVertex3d(minX, maxY, minZ);
+            GL11.glVertex3d(maxX, minY, minZ); GL11.glVertex3d(maxX, maxY, minZ);
+            GL11.glVertex3d(maxX, minY, maxZ); GL11.glVertex3d(maxX, maxY, maxZ);
+            GL11.glVertex3d(minX, minY, maxZ); GL11.glVertex3d(minX, maxY, maxZ);
+            GL11.glEnd();
+        }
+
+        if (drawEyeLine && isLiving) {
+            double h = maxY - minY;
+            double eyeY = minY + (isPlayer ? Math.min(h - 0.12D, h * 0.90D) : (h * 0.85D));
+            GL11.glColor4f(1.0F, 0.22F, 0.22F, 0.95F);
+            GL11.glBegin(GL11.GL_LINES);
+            GL11.glVertex3d(minX, eyeY, minZ); GL11.glVertex3d(maxX, eyeY, minZ);
+            GL11.glVertex3d(maxX, eyeY, minZ); GL11.glVertex3d(maxX, eyeY, maxZ);
+            GL11.glVertex3d(maxX, eyeY, maxZ); GL11.glVertex3d(minX, eyeY, maxZ);
+            GL11.glVertex3d(minX, eyeY, maxZ); GL11.glVertex3d(minX, eyeY, minZ);
+            GL11.glEnd();
+        }
+    }
+
+    private static void drawFilledBox(
+            double minX, double minY, double minZ,
+            double maxX, double maxY, double maxZ,
+            float r, float g, float b, float a
+    ) {
+        GL11.glColor4f(r, g, b, a);
+        GL11.glBegin(GL11.GL_QUADS);
+        // Bottom
+        GL11.glVertex3d(minX, minY, minZ); GL11.glVertex3d(maxX, minY, minZ);
+        GL11.glVertex3d(maxX, minY, maxZ); GL11.glVertex3d(minX, minY, maxZ);
+        // Top
+        GL11.glVertex3d(minX, maxY, minZ); GL11.glVertex3d(minX, maxY, maxZ);
+        GL11.glVertex3d(maxX, maxY, maxZ); GL11.glVertex3d(maxX, maxY, minZ);
+        // North
+        GL11.glVertex3d(minX, minY, minZ); GL11.glVertex3d(minX, maxY, minZ);
+        GL11.glVertex3d(maxX, maxY, minZ); GL11.glVertex3d(maxX, minY, minZ);
+        // South
+        GL11.glVertex3d(minX, minY, maxZ); GL11.glVertex3d(maxX, minY, maxZ);
+        GL11.glVertex3d(maxX, maxY, maxZ); GL11.glVertex3d(minX, maxY, maxZ);
+        // West
+        GL11.glVertex3d(minX, minY, minZ); GL11.glVertex3d(minX, minY, maxZ);
+        GL11.glVertex3d(minX, maxY, maxZ); GL11.glVertex3d(minX, maxY, minZ);
+        // East
+        GL11.glVertex3d(maxX, minY, minZ); GL11.glVertex3d(maxX, maxY, minZ);
+        GL11.glVertex3d(maxX, maxY, maxZ); GL11.glVertex3d(maxX, minY, maxZ);
+        GL11.glEnd();
+    }
+
+    private static void drawWorldTagStack(
+            TagRenderEntry entry,
+            float viewYaw,
+            float viewPitch,
+            float bgR, float bgG, float bgB, float bgA
+    ) {
+        double dist = Math.sqrt(entry.distSq);
+        float scale = 0.02666667F;
+        if (dist > 10.0D) {
+            scale = (float) (0.02666667D * (1.0D + (dist - 10.0D) * 0.045D));
+            if (scale > 0.16F) {
+                scale = 0.16F;
+            }
+        }
+
+        GL11.glPushMatrix();
+        GL11.glTranslated(entry.relX, entry.relY, entry.relZ);
+        GL11.glRotatef(-viewYaw, 0.0F, 1.0F, 0.0F);
+        GL11.glRotatef(viewPitch, 1.0F, 0.0F, 0.0F);
+        GL11.glScalef(-scale, -scale, scale);
+
+        if (entry.tntLine != null) {
+            drawSingleTagLine(entry.tntLine, 0, entry.tntColor, 0.0F, 0.0F, 0.0F, 0.55F);
+            GL11.glPopMatrix();
+            return;
+        }
+
+        // Stack cleanly: Distance above Nametag, Armor Enchants right below Nametag
+        int nameY = 0;
+        if (entry.armorLine != null && entry.nameLine != null) {
+            drawSingleTagLine(entry.armorLine, 0, 0xFF7BE8FF, 0.0F, 0.0F, 0.0F, Math.max(0.25F, bgA));
+            nameY = -12;
+        } else if (entry.armorLine != null) {
+            drawSingleTagLine(entry.armorLine, 0, 0xFF7BE8FF, 0.0F, 0.0F, 0.0F, Math.max(0.25F, bgA));
+            nameY = -12;
+        }
+
+        if (entry.nameLine != null) {
+            drawSingleTagLine(entry.nameLine, nameY, 0xFFFFFFFF, bgR, bgG, bgB, bgA);
+        }
+
+        if (entry.distanceLine != null) {
+            int distY = (entry.nameLine != null) ? (nameY - 12) : nameY;
+            drawSingleTagLine(entry.distanceLine, distY, 0xFFD6E4FF, 0.0F, 0.0F, 0.0F, Math.max(0.22F, bgA * 0.85F));
+        }
+
+        GL11.glPopMatrix();
+    }
+
+    private static void drawSingleTagLine(
+            String text,
+            int yOffset,
+            int textColor,
+            float bgR, float bgG, float bgB, float bgA
+    ) {
+        int textWidth = getTextWidth(text);
+        if (textWidth <= 0) {
+            return;
+        }
+        int halfWidth = textWidth / 2;
+
+        if (bgA > 0.005F) {
+            GL11.glDisable(GL11.GL_TEXTURE_2D);
+            GL11.glColor4f(bgR, bgG, bgB, bgA);
+            GL11.glBegin(GL11.GL_QUADS);
+            GL11.glVertex3d(-halfWidth - 2, yOffset - 2, 0.0D);
+            GL11.glVertex3d(-halfWidth - 2, yOffset + 9, 0.0D);
+            GL11.glVertex3d(halfWidth + 2, yOffset + 9, 0.0D);
+            GL11.glVertex3d(halfWidth + 2, yOffset - 2, 0.0D);
+            GL11.glEnd();
+        }
+
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+        drawTextWithShadow(text, -halfWidth, yOffset, textColor);
+    }
+
+    private static boolean isEntityInvisible(Object entity) {
+        if (dataWatcherField == null || dataWatcherGetByteMethod == null) {
+            return false;
+        }
+        try {
+            Object dw = dataWatcherField.get(entity);
+            if (dw != null) {
+                byte flags = ((Byte) dataWatcherGetByteMethod.invoke(dw, 0)).byteValue();
+                return (flags & 0x20) != 0;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private static boolean isPrimedTnt(Object entity, Class<?> entityBaseClass, Class<?> livingBaseClass) {
+        if (entity == null || entityBaseClass == null || livingBaseClass == null) {
+            return false;
+        }
+        Class<?> cls = entity.getClass();
+        if (tntClassChecked && tntEntityClass != null) {
+            return cls == tntEntityClass;
+        }
+        if (cls.getSuperclass() != entityBaseClass) {
+            return false;
+        }
+
+        Field foundInt = null;
+        boolean hasLivingRef = false;
+        int instanceFieldCount = 0;
+        for (Field f : cls.getDeclaredFields()) {
+            if (Modifier.isStatic(f.getModifiers())) continue;
+            instanceFieldCount++;
+            if (f.getType() == int.class) {
+                foundInt = f;
+            } else if (f.getType() == livingBaseClass) {
+                hasLivingRef = true;
+            }
+        }
+        // Vanilla 1.8.9 EntityTNTPrimed has exactly 2 instance fields: int fuse + LivingEntity placer
+        if (instanceFieldCount == 2 && foundInt != null && hasLivingRef) {
+            foundInt.setAccessible(true);
+            tntEntityClass = cls;
+            tntFuseField = foundInt;
+            tntClassChecked = true;
+            return true;
+        }
+        return false;
+    }
+
+    private static int getTntFuse(Object tntEntity) {
+        if (tntFuseField == null) {
+            return -1;
+        }
+        try {
+            return tntFuseField.getInt(tntEntity);
+        } catch (Exception ignored) {
+            return -1;
+        }
+    }
+
+    private static String getArmorEnchantSummary(Object entity) {
+        if (entityGetInventoryMethod == null) {
+            return null;
+        }
+        Object[] inv;
+        try {
+            Object res = entityGetInventoryMethod.invoke(entity);
+            if (!(res instanceof Object[])) {
+                return null;
+            }
+            inv = (Object[]) res;
+        } catch (Exception ignored) {
+            return null;
+        }
+        if (inv.length < 4) {
+            return null;
+        }
+
+        // Player inventory armor: [0=boots, 1=legs, 2=chest, 3=helm]
+        // Mob & ArmorStand equipment: [0=held, 1=boots, 2=legs, 3=chest, 4=helm]
+        int startIdx = inv.length - 1;
+        int endIdx = inv.length - 4;
+        boolean hasAnyArmor = false;
+        StringBuilder sb = new StringBuilder();
+
+        for (int i = startIdx; i >= endIdx; i--) {
+            Object stack = inv[i];
+            if (i != startIdx) {
+                sb.append(' ');
+            }
+            if (stack == null) {
+                sb.append('-');
+                continue;
+            }
+            hasAnyArmor = true;
+            sb.append(formatArmorPieceEnchants(stack));
+        }
+
+        return hasAnyArmor ? sb.toString() : null;
+    }
+
+    private static String formatArmorPieceEnchants(Object itemStack) {
+        ensureItemStackNbtField(itemStack);
+        if (itemStackNbtField == null) {
+            return "A";
+        }
+        try {
+            Object nbt = itemStackNbtField.get(itemStack);
+            if (nbt == null) {
+                return "0";
+            }
+            String s = nbt.toString();
+            int enchStart = s.indexOf("ench:[");
+            if (enchStart < 0) {
+                return "0";
+            }
+            int listStart = enchStart + 6;
+            int listEnd = s.indexOf(']', listStart);
+            if (listEnd <= listStart) {
+                return "*";
+            }
+            String listStr = s.substring(listStart, listEnd);
+            if (listStr.trim().isEmpty()) {
+                return "*";
+            }
+
+            int prot = 0;
+            int fireProt = 0;
+            int blastProt = 0;
+            int projProt = 0;
+            int thorns = 0;
+
+            int pos = 0;
+            while (pos < listStr.length()) {
+                int open = listStr.indexOf('{', pos);
+                if (open < 0) break;
+                int close = listStr.indexOf('}', open);
+                if (close < 0) break;
+                String entry = listStr.substring(open + 1, close);
+                int id = parseTagNumber(entry, "id:");
+                int lvl = parseTagNumber(entry, "lvl:");
+                if (id == 0 && lvl > prot) prot = lvl;
+                else if (id == 1 && lvl > fireProt) fireProt = lvl;
+                else if (id == 3 && lvl > blastProt) blastProt = lvl;
+                else if (id == 4 && lvl > projProt) projProt = lvl;
+                else if (id == 7 && lvl > thorns) thorns = lvl;
+                pos = close + 1;
+            }
+
+            if (prot > 0) return "P" + prot + (thorns > 0 ? "T" + thorns : "");
+            if (blastProt > 0) return "BP" + blastProt;
+            if (projProt > 0) return "PP" + projProt;
+            if (fireProt > 0) return "FP" + fireProt;
+            if (thorns > 0) return "T" + thorns;
+            return "*";
+        } catch (Exception ignored) {
+            return "A";
+        }
+    }
+
+    private static int parseTagNumber(String entry, String key) {
+        int idx = entry.indexOf(key);
+        if (idx < 0) return -1;
+        int i = idx + key.length();
+        int val = 0;
+        boolean foundDigit = false;
+        while (i < entry.length()) {
+            char c = entry.charAt(i);
+            if (c >= '0' && c <= '9') {
+                val = val * 10 + (c - '0');
+                foundDigit = true;
+                i++;
+            } else {
+                break;
+            }
+        }
+        return foundDigit ? val : -1;
+    }
+
+    private static void ensureItemStackNbtField(Object itemStack) {
+        if (itemStackNbtSearched || itemStack == null) {
+            return;
+        }
+        itemStackNbtSearched = true;
+        for (Field f : itemStack.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
+            Class<?> ft = f.getType();
+            boolean hasStringBool = false;
+            boolean hasStringInt = false;
+            boolean hasStringShort = false;
+            for (Method m : ft.getMethods()) {
+                Class<?>[] p = m.getParameterTypes();
+                if (p.length == 1 && p[0] == String.class) {
+                    if (m.getReturnType() == boolean.class) hasStringBool = true;
+                    else if (m.getReturnType() == int.class) hasStringInt = true;
+                    else if (m.getReturnType() == short.class) hasStringShort = true;
+                }
+            }
+            if (hasStringBool && hasStringInt && hasStringShort) {
+                f.setAccessible(true);
+                itemStackNbtField = f;
+                return;
+            }
+        }
+    }
+
+    public static int getTextWidth(String text) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        if (HitJumpMod.getCachedClient() != null) {
+            ensureTextRenderer(HitJumpMod.getCachedClient());
+        }
+        if (textRendererObj != null && textGetWidthMethod != null) {
+            try {
+                return ((Integer) textGetWidthMethod.invoke(textRendererObj, text)).intValue();
+            } catch (Exception ignored) {
+            }
+        }
+        return text.length() * 6;
+    }
+
+    private static void drawTextWithShadow(String text, float x, float y, int color) {
+        if (textRendererObj != null && textDrawShadowMethod != null) {
+            try {
+                textDrawShadowMethod.invoke(textRendererObj, text, x, y, color);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static void ensureTextRenderer(Minecraft client) {
+        if (textRendererSearched || client == null) {
+            return;
+        }
+        textRendererSearched = true;
+        for (Field f : client.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
+            Object val;
+            try {
+                f.setAccessible(true);
+                val = f.get(client);
+            } catch (Exception ignored) {
+                continue;
+            }
+            if (val == null || val.getClass().isArray()) continue;
+
+            Method foundWidth = null;
+            Method foundShadow = null;
+            Method foundPlain = null;
+            for (Method m : val.getClass().getMethods()) {
+                if (m.getReturnType() != int.class) continue;
+                Class<?>[] p = m.getParameterTypes();
+                if (p.length == 1 && p[0] == String.class) {
+                    foundWidth = m;
+                } else if (p.length == 4 && p[0] == String.class && p[1] == float.class && p[2] == float.class && p[3] == int.class) {
+                    foundShadow = m;
+                } else if (p.length == 4 && p[0] == String.class && p[1] == int.class && p[2] == int.class && p[3] == int.class) {
+                    foundPlain = m;
+                }
+            }
+            if (foundWidth != null && foundShadow != null && foundPlain != null) {
+                textRendererObj = val;
+                textGetWidthMethod = foundWidth;
+                textDrawShadowMethod = foundShadow;
+                return;
+            }
+        }
+    }
+
+    private static String getEntityTagLabel(Object entity, boolean isPlayer) {
+        if (isPlayer) {
+            String display = getFormattedDisplayName(entity);
+            if (display != null && !display.trim().isEmpty()) {
+                return display;
+            }
+            return getPlayerProfileName(entity);
+        }
+
+        String custom = getCustomNameTag(entity);
+        if (custom != null && !custom.trim().isEmpty()) {
+            return custom;
+        }
+        return null;
+    }
+
+    private static String getCustomNameTag(Object entity) {
+        if (dataWatcherField == null || dataWatcherGetStringMethod == null) {
+            return null;
+        }
+        try {
+            Object dw = dataWatcherField.get(entity);
+            if (dw != null) {
+                Object val = dataWatcherGetStringMethod.invoke(dw, 2);
+                return (val instanceof String) ? (String) val : null;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static String getPlayerProfileName(Object playerEntity) {
+        if (gameProfileField == null || gameProfileGetNameMethod == null) {
+            return null;
+        }
+        try {
+            Object profile = gameProfileField.get(playerEntity);
+            if (profile != null) {
+                Object name = gameProfileGetNameMethod.invoke(profile);
+                return (name instanceof String) ? (String) name : null;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static String getFormattedDisplayName(Object entity) {
+        if (entityGetDisplayNameMethod == null) {
+            return null;
+        }
+        try {
+            Object textObj = entityGetDisplayNameMethod.invoke(entity);
+            if (textObj == null) {
+                return null;
+            }
+            if (!textFormattedSearched) {
+                textFormattedSearched = true;
+                Class<?> textInterface = entityGetDisplayNameMethod.getReturnType();
+                Method best = null;
+                String bestVal = "";
+                for (Method m : textInterface.getMethods()) {
+                    if (m.getParameterTypes().length != 0 || m.getReturnType() != String.class) continue;
+                    if ("toString".equals(m.getName())) continue;
+                    try {
+                        Object res = m.invoke(textObj);
+                        if (res instanceof String) {
+                            String s = (String) res;
+                            if (s.indexOf('\u00A7') >= 0) {
+                                best = m;
+                                break;
+                            }
+                            if (s.length() > bestVal.length()) {
+                                best = m;
+                                bestVal = s;
+                            }
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+                textFormattedMethod = best;
+            }
+            if (textFormattedMethod != null) {
+                Object res = textFormattedMethod.invoke(textObj);
+                if (res instanceof String) {
+                    return (String) res;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static void ensureNameAccessFields(Object player) {
+        if (nameAccessSearched || player == null) {
+            return;
+        }
+        nameAccessSearched = true;
+
+        Class<?> entityClass = HitJumpMod.getEntityBaseClass(player);
+        Class<?> playerBaseClass = HitJumpMod.getPlayerBaseClass(player);
+
+        if (entityClass != null) {
+            // Locate DataWatcher field on Entity
+            for (Field f : entityClass.getDeclaredFields()) {
+                if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
+                Class<?> ft = f.getType();
+                Method strM = null;
+                Method byteM = null;
+                boolean hasInt = false;
+                for (Method m : ft.getMethods()) {
+                    Class<?>[] p = m.getParameterTypes();
+                    if (p.length == 1 && p[0] == int.class) {
+                        if (m.getReturnType() == String.class) strM = m;
+                        else if (m.getReturnType() == byte.class) byteM = m;
+                        else if (m.getReturnType() == int.class) hasInt = true;
+                    }
+                }
+                if (strM != null && byteM != null && hasInt) {
+                    f.setAccessible(true);
+                    dataWatcherField = f;
+                    dataWatcherGetByteMethod = byteM;
+                    dataWatcherGetStringMethod = strM;
+                    break;
+                }
+            }
+
+            // Locate getDisplayName() and getInventory() (ItemStack[]) on Entity
+            for (Method m : entityClass.getMethods()) {
+                if (m.getParameterTypes().length != 0) continue;
+                Class<?> rt = m.getReturnType();
+                if (entityGetDisplayNameMethod == null && rt.isInterface() && !rt.getName().startsWith("java.")) {
+                    entityGetDisplayNameMethod = m;
+                } else if (entityGetInventoryMethod == null
+                        && rt.isArray()
+                        && !rt.getComponentType().isPrimitive()
+                        && rt.getComponentType() != entityClass) {
+                    entityGetInventoryMethod = m;
+                }
+            }
+        }
+
+        if (playerBaseClass != null) {
+            for (Field f : playerBaseClass.getDeclaredFields()) {
+                if (Modifier.isStatic(f.getModifiers())) continue;
+                if ("com.mojang.authlib.GameProfile".equals(f.getType().getName())) {
+                    f.setAccessible(true);
+                    gameProfileField = f;
+                    try {
+                        gameProfileGetNameMethod = f.getType().getMethod("getName");
+                    } catch (Exception ignored) {
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    private static void ensureBoxFields(Object boxObj) {
+        if (boxFieldsSearched || boxObj == null) {
+            return;
+        }
+        boxFieldsSearched = true;
+        Field[] fields = boxObj.getClass().getDeclaredFields();
+        Field[] doubles = new Field[6];
+        int idx = 0;
+        for (Field f : fields) {
+            if (!Modifier.isStatic(f.getModifiers()) && f.getType() == double.class) {
+                doubles[idx++] = f;
+                if (idx == 6) break;
+            }
+        }
+        if (idx == 6) {
+            boxMinXField = doubles[0];
+            boxMinYField = doubles[1];
+            boxMinZField = doubles[2];
+            boxMaxXField = doubles[3];
+            boxMaxYField = doubles[4];
+            boxMaxZField = doubles[5];
+            for (int i = 0; i < 6; i++) {
+                doubles[i].setAccessible(true);
+            }
+        }
+    }
+
+    private static List<?> getLoadedEntityList(Minecraft client) {
+        try {
+            List<?> bestList = null;
+            Class<?> worldCls = client.world.getClass();
+            while (worldCls != null && worldCls != Object.class) {
+                for (Field f : worldCls.getDeclaredFields()) {
+                    if (Modifier.isStatic(f.getModifiers())) continue;
+                    if (!List.class.isAssignableFrom(f.getType())) continue;
+                    f.setAccessible(true);
+                    Object val = f.get(client.world);
+                    if (val instanceof List) {
+                        List<?> list = (List<?>) val;
+                        if (list.contains(client.player)) {
+                            if (bestList == null || list.size() > bestList.size()) {
+                                bestList = list;
+                            }
+                        }
+                    }
+                }
+                worldCls = worldCls.getSuperclass();
+            }
+            return bestList;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+}
