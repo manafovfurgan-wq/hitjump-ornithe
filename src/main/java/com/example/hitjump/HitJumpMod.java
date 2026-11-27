@@ -27,14 +27,15 @@ public class HitJumpMod implements ClientModInitializer {
             return;
         }
 
-        // Press 'H' in-game (when no menu is open) to open HitJump Settings
-        boolean isMenuKeyDown = Keyboard.isKeyDown(Keyboard.KEY_H);
+        HitJumpConfig config = HitJumpConfig.getInstance();
+
+        // Open settings menu using the configured keybind
+        boolean isMenuKeyDown = isKeyDownSafe(config.menuKeyCode);
         if (isMenuKeyDown && !wasMenuKeyDown && client.screen == null && client.player != null) {
             client.openScreen(new HitJumpConfigScreen(null));
         }
         wasMenuKeyDown = isMenuKeyDown;
 
-        HitJumpConfig config = HitJumpConfig.getInstance();
         if (!config.enabled || client.player == null || client.world == null) {
             lastHurtTime = 0;
             pendingJumpTicks = -1;
@@ -64,6 +65,17 @@ public class HitJumpMod implements ClientModInitializer {
         }
     }
 
+    private static boolean isKeyDownSafe(int keyCode) {
+        if (keyCode <= 0 || keyCode >= 256) {
+            return false;
+        }
+        try {
+            return Keyboard.isKeyDown(keyCode);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     private static int getHurtTime(Object player) {
         if (!hurtTimeSearched) {
             hurtTimeField = findHurtTimeField(player.getClass());
@@ -82,8 +94,6 @@ public class HitJumpMod implements ClientModInitializer {
         Class<?> cls = startClass;
         while (cls != null && cls != Object.class) {
             Field[] fields = cls.getDeclaredFields();
-            // Matches vanilla 1.8.9 LivingEntity layout around hurtTime:
-            // boolean, int, int, int (hurtTime), int, float, int, float, float
             for (int i = 0; i <= fields.length - 9; i++) {
                 if (isInstanceField(fields[i], boolean.class)
                         && isInstanceField(fields[i + 1], int.class)
