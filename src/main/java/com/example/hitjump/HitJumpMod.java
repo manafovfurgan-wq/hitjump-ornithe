@@ -36,6 +36,9 @@ public class HitJumpMod implements ClientModInitializer {
     private static Field attackCooldownField = null;
     private static boolean attackCooldownSearched = false;
 
+    private static Field rightClickDelayField = null;
+    private static boolean rightClickDelaySearched = false;
+
     private static boolean entityMotionSearched = false;
     private static Field entityXField = null;
     private static Field entityYField = null;
@@ -88,6 +91,11 @@ public class HitJumpMod implements ClientModInitializer {
         // 1.7 Head Position fix (MC-67665)
         if (config.headFixEnabled) {
             syncHeadYawInternal(client);
+        }
+
+        // GodPlace: clear right-click cooldown immediately when set to 0t
+        if (config.godPlaceEnabled && config.godPlaceDelayTicks == 0) {
+            applyGodPlace(client, 0);
         }
 
         // NoHitDelay: clamp vanilla's 10-tick miss penalty (never touching GUI-close 10000 lock)
@@ -149,7 +157,11 @@ public class HitJumpMod implements ClientModInitializer {
         if (client == null || client.player == null) {
             return;
         }
-        if (HitJumpConfig.getInstance().headFixEnabled) {
+        HitJumpConfig config = HitJumpConfig.getInstance();
+        if (config.godPlaceEnabled) {
+            applyGodPlace(client, config.godPlaceDelayTicks);
+        }
+        if (config.headFixEnabled) {
             syncHeadYawInternal(client);
         }
     }
@@ -240,6 +252,43 @@ public class HitJumpMod implements ClientModInitializer {
         }
     }
 
+    private static void applyGodPlace(Minecraft client, int delayTicks) {
+        if (!rightClickDelaySearched) {
+            rightClickDelayField = findRightClickDelayField(client.getClass());
+            rightClickDelaySearched = true;
+        }
+        if (rightClickDelayField != null) {
+            try {
+                // 0t = every tick (20/sec), 1t = skip 1 tick (10/sec), 2t = skip 2 ticks, 3t = vanilla (4-tick gap)
+                int targetTimer = (delayTicks <= 0) ? 0 : Math.min(4, delayTicks + 1);
+                int currentDelay = rightClickDelayField.getInt(client);
+                if (currentDelay > targetTimer) {
+                    rightClickDelayField.setInt(client, targetTimer);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static Field findRightClickDelayField(Class<?> minecraftClass) {
+        Field[] fields = minecraftClass.getDeclaredFields();
+        // Matches vanilla 1.8.9 Minecraft layout around rightClickDelayTimer:
+        // int (rightClickDelayTimer), String (serverName), int (serverPort),
+        // boolean (inGameHasFocus), long (systemTime), int (joinPlayerCounter)
+        for (int i = 0; i <= fields.length - 6; i++) {
+            if (isInstanceField(fields[i], int.class)
+                    && isInstanceField(fields[i + 1], String.class)
+                    && isInstanceField(fields[i + 2], int.class)
+                    && isInstanceField(fields[i + 3], boolean.class)
+                    && isInstanceField(fields[i + 4], long.class)
+                    && isInstanceField(fields[i + 5], int.class)) {
+                fields[i].setAccessible(true);
+                return fields[i];
+            }
+        }
+        return null;
+    }
+
     private static void triggerHitJumpIfValid(Minecraft client, HitJumpConfig config) {
         if (config.hitJumpPlayersOnly && !hasNearbyPlayer(client, 8.0D)) {
             return;
@@ -265,7 +314,6 @@ public class HitJumpMod implements ClientModInitializer {
             double pz = entityZField.getDouble(client.player);
             double maxDistSq = maxRange * maxRange;
 
-            // Both LocalClientPlayerEntity and RemoteClientPlayerEntity share ClientPlayerEntity as superclass
             Class<?> clientPlayerBase = client.player.getClass().getSuperclass();
             List<?> bestList = null;
 
@@ -346,9 +394,6 @@ public class HitJumpMod implements ClientModInitializer {
         Class<?> cls = entity.getClass();
         while (cls != null && cls != Object.class) {
             Field[] fields = cls.getDeclaredFields();
-            // Matches vanilla 1.8.9 Entity layout:
-            // prevX, prevY, prevZ, x, y, z, velX, velY, velZ (9 doubles)
-            // yaw, pitch, prevYaw, prevPitch (4 floats)
             for (int i = 0; i <= fields.length - 13; i++) {
                 if (isInstanceField(fields[i], double.class)
                         && isInstanceField(fields[i + 1], double.class)
@@ -389,14 +434,11 @@ public class HitJumpMod implements ClientModInitializer {
         headYawSearched = true;
         Class<?> playerBaseClass = player.getClass().getSuperclass();
         if (playerBaseClass != null) {
-            playerBaseClass = playerBaseClass.getSuperclass(); // PlayerEntity
+            playerBaseClass = playerBaseClass.getSuperclass();
         }
         Class<?> cls = player.getClass();
         while (cls != null && cls != Object.class) {
             Field[] fields = cls.getDeclaredFields();
-            // Matches vanilla 1.8.9 LivingEntity layout around headYaw:
-            // bodyYaw, prevBodyYaw, headYaw, prevHeadYaw, jumpMovementFactor (5 floats),
-            // attackingPlayer (PlayerEntity), recentlyHit (int), dead (boolean), entityAge (int)
             for (int i = 0; i <= fields.length - 9; i++) {
                 if (isInstanceField(fields[i], float.class)
                         && isInstanceField(fields[i + 1], float.class)
@@ -459,19 +501,14 @@ public class HitJumpMod implements ClientModInitializer {
         Class<?> cls = startClass;
         while (cls != null && cls != Object.class) {
             Field[] fields = cls.getDeclaredFields();
-            // Matches vanilla 1.8.9 PlayerInput (MovementInput):
-            // float moveStrafe, float moveForward, boolean jump, boolean sneak
-            if (fields.length >= 4) {
+            if (fields.length >= 4 && fields.length <= 8) {
                 for (int i = 0; i <= fields.length - 4; i++) {
                     if (isInstanceField(fields[i], float.class)
                             && isInstanceField(fields[i + 1], float.class)
                             && isInstanceField(fields[i + 2], boolean.class)
                             && isInstanceField(fields[i + 3], boolean.class)) {
-                        // Make sure this is the small input class, not a large entity class
-                        if (fields.length <= 8) {
-                            fields[i + 3].setAccessible(true);
-                            return fields[i + 3];
-                        }
+                        fields[i + 3].setAccessible(true);
+                        return fields[i + 3];
                     }
                 }
             }
@@ -513,8 +550,6 @@ public class HitJumpMod implements ClientModInitializer {
 
     private static Field findThirdPersonViewField(Class<?> optionsClass) {
         Field[] fields = optionsClass.getDeclaredFields();
-        // Matches vanilla 1.8.9 GameOptions layout around thirdPersonView:
-        // boolean hideGUI, int thirdPersonView, boolean, boolean, boolean, String, boolean, boolean, float, float, float
         for (int i = 0; i <= fields.length - 11; i++) {
             if (isInstanceField(fields[i], boolean.class)
                     && isInstanceField(fields[i + 1], int.class)
@@ -553,7 +588,6 @@ public class HitJumpMod implements ClientModInitializer {
         if (attackCooldownField != null) {
             try {
                 int currentDelay = attackCooldownField.getInt(client);
-                // Only clamp vanilla's 1..10 miss penalty; leave the 10000 GUI-close guard intact
                 if (currentDelay > maxDelayTicks && currentDelay <= 10) {
                     attackCooldownField.setInt(client, maxDelayTicks);
                 }
