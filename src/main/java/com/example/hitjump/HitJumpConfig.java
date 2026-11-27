@@ -23,9 +23,16 @@ public class HitJumpConfig {
 
     private static HitJumpConfig instance = new HitJumpConfig();
 
+    // HitJump settings
     public boolean enabled = true;
     public int jumpFrequency = 100;
     public int latencyTicks = 0;
+
+    // NoJumpDelay settings
+    public boolean noJumpDelayEnabled = true;
+    public int jumpDelayTicks = 0;
+
+    // Menu hotkey
     public int menuKeyCode = Keyboard.KEY_H;
 
     public static HitJumpConfig getInstance() {
@@ -66,6 +73,8 @@ public class HitJumpConfig {
         this.enabled = true;
         this.jumpFrequency = 100;
         this.latencyTicks = 0;
+        this.noJumpDelayEnabled = true;
+        this.jumpDelayTicks = 0;
         this.menuKeyCode = Keyboard.KEY_H;
     }
 
@@ -74,6 +83,8 @@ public class HitJumpConfig {
         if (jumpFrequency > 100) jumpFrequency = 100;
         if (latencyTicks < 0) latencyTicks = 0;
         if (latencyTicks > 10) latencyTicks = 10;
+        if (jumpDelayTicks < 0) jumpDelayTicks = 0;
+        if (jumpDelayTicks > 10) jumpDelayTicks = 10;
         if (menuKeyCode <= 0 || menuKeyCode >= 256) menuKeyCode = Keyboard.KEY_H;
     }
 }
