@@ -4,6 +4,8 @@ import net.fabricmc.api.ClientModInitializer;
 import net.minecraft.client.Minecraft;
 import org.lwjgl.input.Keyboard;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.Random;
 
 public class HitJumpMod implements ClientModInitializer {
@@ -11,6 +13,9 @@ public class HitJumpMod implements ClientModInitializer {
     private static int lastHurtTime = 0;
     private static int pendingJumpTicks = -1;
     private static boolean wasMenuKeyDown = false;
+
+    private static Field hurtTimeField = null;
+    private static boolean hurtTimeSearched = false;
 
     @Override
     public void onInitializeClient() {
@@ -36,7 +41,7 @@ public class HitJumpMod implements ClientModInitializer {
             return;
         }
 
-        int currentHurtTime = client.player.hurtTimer;
+        int currentHurtTime = getHurtTime(client.player);
 
         if (currentHurtTime > lastHurtTime && currentHurtTime > 0) {
             if (rollFrequency(config.jumpFrequency)) {
@@ -57,6 +62,49 @@ public class HitJumpMod implements ClientModInitializer {
                 pendingJumpTicks = -1;
             }
         }
+    }
+
+    private static int getHurtTime(Object player) {
+        if (!hurtTimeSearched) {
+            hurtTimeField = findHurtTimeField(player.getClass());
+            hurtTimeSearched = true;
+        }
+        if (hurtTimeField != null) {
+            try {
+                return hurtTimeField.getInt(player);
+            } catch (Exception ignored) {
+            }
+        }
+        return 0;
+    }
+
+    private static Field findHurtTimeField(Class<?> startClass) {
+        Class<?> cls = startClass;
+        while (cls != null && cls != Object.class) {
+            Field[] fields = cls.getDeclaredFields();
+            // Matches vanilla 1.8.9 LivingEntity layout around hurtTime:
+            // boolean, int, int, int (hurtTime), int, float, int, float, float
+            for (int i = 0; i <= fields.length - 9; i++) {
+                if (isInstanceField(fields[i], boolean.class)
+                        && isInstanceField(fields[i + 1], int.class)
+                        && isInstanceField(fields[i + 2], int.class)
+                        && isInstanceField(fields[i + 3], int.class)
+                        && isInstanceField(fields[i + 4], int.class)
+                        && isInstanceField(fields[i + 5], float.class)
+                        && isInstanceField(fields[i + 6], int.class)
+                        && isInstanceField(fields[i + 7], float.class)
+                        && isInstanceField(fields[i + 8], float.class)) {
+                    fields[i + 3].setAccessible(true);
+                    return fields[i + 3];
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
+    }
+
+    private static boolean isInstanceField(Field field, Class<?> expectedType) {
+        return !Modifier.isStatic(field.getModifiers()) && field.getType() == expectedType;
     }
 
     private static boolean rollFrequency(int frequencyPercent) {
