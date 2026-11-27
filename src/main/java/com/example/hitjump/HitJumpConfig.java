@@ -3,6 +3,7 @@ package com.example.hitjump;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.loader.api.FabricLoader;
+import org.lwjgl.input.Keyboard;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -25,6 +26,7 @@ public class HitJumpConfig {
     public boolean enabled = true;
     public int jumpFrequency = 100;
     public int latencyTicks = 0;
+    public int menuKeyCode = Keyboard.KEY_H;
 
     public static HitJumpConfig getInstance() {
         return instance;
@@ -64,6 +66,7 @@ public class HitJumpConfig {
         this.enabled = true;
         this.jumpFrequency = 100;
         this.latencyTicks = 0;
+        this.menuKeyCode = Keyboard.KEY_H;
     }
 
     public void clampValues() {
@@ -71,5 +74,6 @@ public class HitJumpConfig {
         if (jumpFrequency > 100) jumpFrequency = 100;
         if (latencyTicks < 0) latencyTicks = 0;
         if (latencyTicks > 10) latencyTicks = 10;
+        if (menuKeyCode <= 0 || menuKeyCode >= 256) menuKeyCode = Keyboard.KEY_H;
     }
 }
