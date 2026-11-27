@@ -19,6 +19,11 @@ public class GameRendererMixin {
         HitJumpMod.syncHeadYaw();
     }
 
+    @Inject(method = "renderWorld", at = @At("TAIL"), require = 0)
+    private void hitjump$onRenderWorldTail(float tickDelta, long limitTime, CallbackInfo ci) {
+        HitJumpMod.onRenderWorldTail(tickDelta);
+    }
+
     @Inject(method = "transformCamera", at = @At("HEAD"))
     private void hitjump$onTransformCameraHead(float tickDelta, CallbackInfo ci) {
         HitJumpMod.onTransformCameraHead(tickDelta);
