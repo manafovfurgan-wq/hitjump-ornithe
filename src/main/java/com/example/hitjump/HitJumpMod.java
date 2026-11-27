@@ -1355,5 +1355,94 @@ public class HitJumpMod implements ClientModInitializer {
         return null;
     }
 
-    private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
-        if (!jumpTicks
+private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
+        if (!jumpTicksSearched) {
+            jumpTicksField = findJumpTicksField(player.getClass());
+            jumpTicksSearched = true;
+        }
+        if (jumpTicksField != null) {
+            try {
+                int currentDelay = jumpTicksField.getInt(player);
+                if (currentDelay > maxDelayTicks) {
+                    jumpTicksField.setInt(player, maxDelayTicks);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static Field findJumpTicksField(Class<?> startClass) {
+        Class<?> cls = startClass;
+        while (cls != null && cls != Object.class) {
+            Field[] fields = cls.getDeclaredFields();
+            for (int i = 0; i <= fields.length - 8; i++) {
+                if (isInstanceField(fields[i], boolean.class)
+                        && isInstanceField(fields[i + 1], cls)
+                        && isInstanceField(fields[i + 2], int.class)
+                        && isInstanceField(fields[i + 3], cls)
+                        && isInstanceField(fields[i + 4], int.class)
+                        && isInstanceField(fields[i + 5], float.class)
+                        && isInstanceField(fields[i + 6], int.class)
+                        && isInstanceField(fields[i + 7], float.class)) {
+                    fields[i + 6].setAccessible(true);
+                    return fields[i + 6];
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
+    }
+
+    static int getHurtTime(Object entity) {
+        if (!hurtTimeSearched) {
+            hurtTimeField = findHurtTimeField(entity.getClass());
+            hurtTimeSearched = true;
+        }
+        if (hurtTimeField != null) {
+            try {
+                return hurtTimeField.getInt(entity);
+            } catch (Exception ignored) {
+            }
+        }
+        return 0;
+    }
+
+    private static Field findHurtTimeField(Class<?> startClass) {
+        Class<?> cls = startClass;
+        while (cls != null && cls != Object.class) {
+            Field[] fields = cls.getDeclaredFields();
+            for (int i = 0; i <= fields.length - 9; i++) {
+                if (isInstanceField(fields[i], boolean.class)
+                        && isInstanceField(fields[i + 1], int.class)
+                        && isInstanceField(fields[i + 2], int.class)
+                        && isInstanceField(fields[i + 3], int.class)
+                        && isInstanceField(fields[i + 4], int.class)
+                        && isInstanceField(fields[i + 5], float.class)
+                        && isInstanceField(fields[i + 6], int.class)
+                        && isInstanceField(fields[i + 7], float.class)
+                        && isInstanceField(fields[i + 8], float.class)) {
+                    fields[i + 3].setAccessible(true);
+                    return fields[i + 3];
+                }
+            }
+            cls = cls.getSuperclass();
+        }
+        return null;
+    }
+
+    private static boolean isInstanceField(Field field, Class<?> expectedType) {
+        return !Modifier.isStatic(field.getModifiers()) && field.getType() == expectedType;
+    }
+
+    private static boolean rollFrequency(int frequencyPercent) {
+        if (frequencyPercent <= 0) return false;
+        if (frequencyPercent >= 100) return true;
+        return RANDOM.nextInt(100) < frequencyPercent;
+    }
+
+    private static void tryJump(Minecraft client) {
+        if (client.player != null && client.player.onGround) {
+            client.player.jump();
+        }
+    }
+}
