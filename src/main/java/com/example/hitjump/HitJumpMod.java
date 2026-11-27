@@ -36,7 +36,7 @@ public class HitJumpMod implements ClientModInitializer {
             return;
         }
 
-        int currentHurtTime = client.player.hurtTime;
+        int currentHurtTime = client.player.hurtTimer;
 
         if (currentHurtTime > lastHurtTime && currentHurtTime > 0) {
             if (rollFrequency(config.jumpFrequency)) {
