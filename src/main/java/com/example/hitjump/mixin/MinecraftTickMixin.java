@@ -13,4 +13,14 @@ public class MinecraftTickMixin {
     private void hitjump$onTick(CallbackInfo ci) {
         HitJumpMod.onClientTick((Minecraft) (Object) this);
     }
+
+    @Inject(method = "doAttack", at = @At("HEAD"), require = 0)
+    private void hitjump$onBeforeAttack(CallbackInfo ci) {
+        HitJumpMod.onBeforeAttack((Minecraft) (Object) this);
+    }
+
+    @Inject(method = "doAttack", at = @At("TAIL"), require = 0)
+    private void hitjump$onAfterAttack(CallbackInfo ci) {
+        HitJumpMod.onAfterAttack((Minecraft) (Object) this);
+    }
 }
