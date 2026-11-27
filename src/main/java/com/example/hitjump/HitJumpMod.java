@@ -2,6 +2,7 @@ package com.example.hitjump;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screen.Screen;
 import org.lwjgl.input.Keyboard;
 
 import java.lang.reflect.Field;
@@ -19,6 +20,9 @@ public class HitJumpMod implements ClientModInitializer {
 
     private static Field jumpTicksField = null;
     private static boolean jumpTicksSearched = false;
+
+    private static Field attackCooldownField = null;
+    private static boolean attackCooldownSearched = false;
 
     @Override
     public void onInitializeClient() {
@@ -43,6 +47,11 @@ public class HitJumpMod implements ClientModInitializer {
             lastHurtTime = 0;
             pendingJumpTicks = -1;
             return;
+        }
+
+        // NoHitDelay: clamp vanilla's 10-tick miss penalty (never touching GUI-close 10000 lock)
+        if (config.noHitDelayEnabled) {
+            applyNoHitDelay(client, config.hitDelayTicks);
         }
 
         // NoJumpDelay: clamp vanilla's 10-tick jump cooldown before movement ticks
@@ -80,6 +89,26 @@ public class HitJumpMod implements ClientModInitializer {
         }
     }
 
+    public static void onBeforeAttack(Minecraft client) {
+        if (client == null || client.player == null || client.world == null) {
+            return;
+        }
+        HitJumpConfig config = HitJumpConfig.getInstance();
+        if (config.noHitDelayEnabled) {
+            applyNoHitDelay(client, config.hitDelayTicks);
+        }
+    }
+
+    public static void onAfterAttack(Minecraft client) {
+        if (client == null || client.player == null || client.world == null) {
+            return;
+        }
+        HitJumpConfig config = HitJumpConfig.getInstance();
+        if (config.noHitDelayEnabled) {
+            applyNoHitDelay(client, config.hitDelayTicks);
+        }
+    }
+
     private static boolean isKeyDownSafe(int keyCode) {
         if (keyCode <= 0 || keyCode >= 256) {
             return false;
@@ -89,6 +118,41 @@ public class HitJumpMod implements ClientModInitializer {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private static void applyNoHitDelay(Minecraft client, int maxDelayTicks) {
+        if (!attackCooldownSearched) {
+            attackCooldownField = findAttackCooldownField(client.getClass());
+            attackCooldownSearched = true;
+        }
+        if (attackCooldownField != null) {
+            try {
+                int currentDelay = attackCooldownField.getInt(client);
+                // Only clamp vanilla's 1..10 miss penalty; leave the 10000 GUI-close guard intact
+                if (currentDelay > maxDelayTicks && currentDelay <= 10) {
+                    attackCooldownField.setInt(client, maxDelayTicks);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static Field findAttackCooldownField(Class<?> minecraftClass) {
+        Field[] fields = minecraftClass.getDeclaredFields();
+        // Matches vanilla 1.8.9 Minecraft field layout around attackCooldown (leftClickCounter):
+        // Screen, LoadingScreenRenderer, GameRenderer, int (attackCooldown), int (tempWidth), int (tempHeight)
+        for (int i = 0; i <= fields.length - 6; i++) {
+            if (isInstanceField(fields[i], Screen.class)
+                    && !Modifier.isStatic(fields[i + 1].getModifiers()) && !fields[i + 1].getType().isPrimitive()
+                    && !Modifier.isStatic(fields[i + 2].getModifiers()) && !fields[i + 2].getType().isPrimitive()
+                    && isInstanceField(fields[i + 3], int.class)
+                    && isInstanceField(fields[i + 4], int.class)
+                    && isInstanceField(fields[i + 5], int.class)) {
+                fields[i + 3].setAccessible(true);
+                return fields[i + 3];
+            }
+        }
+        return null;
     }
 
     private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
