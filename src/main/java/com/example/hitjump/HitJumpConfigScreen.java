@@ -57,8 +57,12 @@ public class HitJumpConfigScreen extends Screen {
     private int tooltipX = 0;
     private int tooltipY = 0;
 
+    // Per-widget toggle between editing Text Color (false) vs Background Color (true)
+    private final boolean[] hudEditBgColor = new boolean[7];
+
     // 0=Invis, 1=Nametag, 2=HitColor, 3=BlockOutline, 4=ParodyHUD, 5=BlockOverlay
-    private final float[][] pickerHsb = new float[6][3];
+    // 6..12 = Wave 2 HUD Text Colors, 13..19 = Wave 2 HUD Bg Colors
+    private final float[][] pickerHsb = new float[20][3];
 
     public HitJumpConfigScreen(Screen parent) {
         this.parent = parent;
@@ -84,6 +88,13 @@ public class HitJumpConfigScreen extends Screen {
         rgbToPicker(3, c.blockOutlineColor);
         rgbToPicker(4, c.parodyTextColor);
         rgbToPicker(5, c.blockOverlayColor);
+        rgbToPicker(6, c.fpsColor);        rgbToPicker(13, c.fpsBgColor);
+        rgbToPicker(7, c.cpsColor);        rgbToPicker(14, c.cpsBgColor);
+        rgbToPicker(8, c.keystrokesColor); rgbToPicker(15, c.keystrokesBgColor);
+        rgbToPicker(9, c.bedwarsTipsColor);rgbToPicker(16, c.bedwarsTipsBgColor);
+        rgbToPicker(10, c.scoreboardColor);rgbToPicker(17, c.scoreboardBgColor);
+        rgbToPicker(11, c.chatHudColor);   rgbToPicker(18, c.chatHudBgColor);
+        rgbToPicker(12, c.tabHudColor);    rgbToPicker(19, c.tabHudBgColor);
     }
 
     private void rgbToPicker(int idx, int rgb) {
@@ -576,7 +587,178 @@ public class HitJumpConfigScreen extends Screen {
         return y;
     }
 
-    private int renderHudTab(HitJumpConfig c, int x, int y, int w, int mx, int my, String filter) {
+    private interface HudWidgetConsumer {
+        void apply(boolean enabled, int scale, boolean chroma, int textColor, int bgColor, int bgOpacity);
+    }
+
+    private int renderHudTab(final HitJumpConfig c, int x, int y, int w, int mx, int my, String filter) {
+        // Click-and-Drag HUD Layout Editor launcher
+        if (matchesFilter(filter, "hud layout editor drag move resize position location screen")) {
+            int cardH = 54;
+            drawCard(x, y, w, cardH, "HUD Layout Editor");
+            int by = y + 24;
+            boolean hoverEdit = this.mouseInViewport && isInside(mx, my, x + 10, by, w - 20, 20);
+            fillRect(x + 10, by, x + w - 10, by + 20,
+                    hoverEdit ? 0.28F : 0.20F, hoverEdit ? 0.46F : 0.34F, hoverEdit ? 0.72F : 0.56F, 1.0F);
+            this.drawCenteredString(this.textRenderer, "Edit HUD Layout (Drag & Resize All Widgets)",
+                    x + w / 2, by + 6, 0xFFFFFF);
+            if (this.leftJustClicked && hoverEdit) {
+                HitJumpConfig.save();
+                this.minecraft.openScreen(new HudEditorScreen(this));
+            }
+            y += cardH + 8;
+        }
+
+        // Bedrock Paper Doll (Mini-Player)
+        if (matchesFilter(filter, "hud paper doll mini player bedrock skin cape animation sneaking sprinting")) {
+            int cardH = 92;
+            drawCard(x, y, w, cardH, "Bedrock Mini-Player (Paper Doll)");
+            int iy = y + 24;
+            c.paperDollEnabled = drawToggleRow(x + 10, iy, w - 20, "Mini-Player HUD", c.paperDollEnabled, true,
+                    "Renders a live mini version of your character on the HUD with your skin, cape, and movement animations.", mx, my);
+            iy += 22;
+            if (drawCycleRow(x + 10, iy, w - 20, "Display Mode",
+                    c.paperDollDynamic ? "Bedrock Dynamic" : "Always Visible",
+                    "Bedrock Dynamic pops out while moving/sneaking/jumping and hides when idle; Always Visible stays on screen.", mx, my)) {
+                c.paperDollDynamic = !c.paperDollDynamic;
+                HitJumpConfig.save();
+            }
+            iy += 22;
+            c.paperDollScale = drawSliderRow(510, x + 10, iy, w - 20, "Model Scale",
+                    c.paperDollScale, 50, 200, String.format("%.2fx", c.paperDollScale / 100.0F),
+                    "Resizes the mini-player model (use Edit HUD Layout above to drag it to any corner).", mx, my);
+            y += cardH + 8;
+        }
+
+        // FPS HUD
+        if (matchesFilter(filter, "hud fps frames counter color chroma scale background opacity")) {
+            y = renderHudWidgetCard(0, "FPS Counter", x, y, w, mx, my,
+                    c.fpsHudEnabled, c.fpsScale, c.fpsChroma, c.fpsColor, c.fpsBgColor, c.fpsBgOpacity,
+                    "Displays your live framerate on the HUD.", 0, null,
+                    new HudWidgetConsumer() {
+                        public void apply(boolean en, int sc, boolean ch, int tc, int bc, int bo) {
+                            c.fpsHudEnabled = en; c.fpsScale = sc; c.fpsChroma = ch;
+                            c.fpsColor = tc; c.fpsBgColor = bc; c.fpsBgOpacity = bo;
+                        }
+                    });
+        }
+
+        // CPS HUD
+        if (matchesFilter(filter, "hud cps clicks per second lmb rmb left right mouse color chroma scale")) {
+            y = renderHudWidgetCard(1, "CPS Counter", x, y, w, mx, my,
+                    c.cpsHudEnabled, c.cpsScale, c.cpsChroma, c.cpsColor, c.cpsBgColor, c.cpsBgOpacity,
+                    "Tracks live clicks per second over a rolling 1-second window.", 22,
+                    new Runnable() {
+                        public void run() {
+                            String modeStr = (c.cpsMode == 1) ? "LMB Only" : (c.cpsMode == 2 ? "RMB Only" : "LMB | RMB");
+                            if (drawCycleRow(extraX, extraY, extraW, "Click Display Mode", modeStr,
+                                    "Choose between both buttons (LMB | RMB), Left Click only, or Right Click only.", extraMx, extraMy)) {
+                                c.cpsMode = (c.cpsMode + 1) % 3;
+                                HitJumpConfig.save();
+                            }
+                        }
+                    },
+                    new HudWidgetConsumer() {
+                        public void apply(boolean en, int sc, boolean ch, int tc, int bc, int bo) {
+                            c.cpsHudEnabled = en; c.cpsScale = sc; c.cpsChroma = ch;
+                            c.cpsColor = tc; c.cpsBgColor = bc; c.cpsBgOpacity = bo;
+                        }
+                    });
+        }
+
+        // Keystrokes HUD
+        if (matchesFilter(filter, "hud keystrokes wasd lmb rmb spacebar cps color chroma scale")) {
+            y = renderHudWidgetCard(2, "Keystrokes", x, y, w, mx, my,
+                    c.keystrokesEnabled, c.keystrokesScale, c.keystrokesChroma, c.keystrokesColor, c.keystrokesBgColor, c.keystrokesBgOpacity,
+                    "Displays live WASD, LMB, RMB, and Spacebar highlights on your HUD.", 44,
+                    new Runnable() {
+                        public void run() {
+                            c.keystrokesShowCps = drawToggleRow(extraX, extraY, extraW, "Show CPS on LMB/RMB", c.keystrokesShowCps, false,
+                                    "Displays live left and right click CPS inside the LMB and RMB key boxes.", extraMx, extraMy);
+                            c.keystrokesShowSpace = drawToggleRow(extraX, extraY + 22, extraW, "Show Spacebar", c.keystrokesShowSpace, false,
+                                    "Includes a Spacebar bar below the mouse buttons.", extraMx, extraMy);
+                        }
+                    },
+                    new HudWidgetConsumer() {
+                        public void apply(boolean en, int sc, boolean ch, int tc, int bc, int bo) {
+                            c.keystrokesEnabled = en; c.keystrokesScale = sc; c.keystrokesChroma = ch;
+                            c.keystrokesColor = tc; c.keystrokesBgColor = bc; c.keystrokesBgOpacity = bo;
+                        }
+                    });
+        }
+
+        // Bedwars Strategy Advisor
+        if (matchesFilter(filter, "hud bedwars advisor tips strategy chat parser bed destroyed threat rotation")) {
+            y = renderHudWidgetCard(3, "Bedwars Strategy Advisor", x, y, w, mx, my,
+                    c.bedwarsTipsEnabled, c.bedwarsTipsScale, c.bedwarsTipsChroma, c.bedwarsTipsColor, c.bedwarsTipsBgColor, c.bedwarsTipsBgOpacity,
+                    "Reads Bedwars chat locally to track broken beds, sweeping threats, and macro rotations.", 22,
+                    new Runnable() {
+                        public void run() {
+                            c.bedwarsTipsDemo = drawToggleRow(extraX, extraY, extraW, "Preview Demo Callouts", c.bedwarsTipsDemo, false,
+                                    "Displays sample Bedwars strategy callouts even outside a match so you can style and position the box.", extraMx, extraMy);
+                        }
+                    },
+                    new HudWidgetConsumer() {
+                        public void apply(boolean en, int sc, boolean ch, int tc, int bc, int bo) {
+                            c.bedwarsTipsEnabled = en; c.bedwarsTipsScale = sc; c.bedwarsTipsChroma = ch;
+                            c.bedwarsTipsColor = tc; c.bedwarsTipsBgColor = bc; c.bedwarsTipsBgOpacity = bo;
+                        }
+                    });
+        }
+
+        // Custom Scoreboard (Sidebar)
+        if (matchesFilter(filter, "hud scoreboard sidebar numbers color chroma scale background opacity")) {
+            y = renderHudWidgetCard(4, "Custom Scoreboard (Sidebar)", x, y, w, mx, my,
+                    c.scoreboardHudEnabled, c.scoreboardScale, c.scoreboardChroma, c.scoreboardColor, c.scoreboardBgColor, c.scoreboardBgOpacity,
+                    "Draws a customizable, movable Sidebar scoreboard (disable duplicate sidebar mods if enabled).", 22,
+                    new Runnable() {
+                        public void run() {
+                            c.scoreboardHideNumbers = drawToggleRow(extraX, extraY, extraW, "Hide Red Numbers", c.scoreboardHideNumbers, false,
+                                    "Removes the red line numbers on the right side of the scoreboard.", extraMx, extraMy);
+                        }
+                    },
+                    new HudWidgetConsumer() {
+                        public void apply(boolean en, int sc, boolean ch, int tc, int bc, int bo) {
+                            c.scoreboardHudEnabled = en; c.scoreboardScale = sc; c.scoreboardChroma = ch;
+                            c.scoreboardColor = tc; c.scoreboardBgColor = bc; c.scoreboardBgOpacity = bo;
+                        }
+                    });
+        }
+
+        // Custom Chat Box
+        if (matchesFilter(filter, "hud chat box background opacity transparent color chroma scale lines")) {
+            y = renderHudWidgetCard(5, "Custom Chat Box", x, y, w, mx, my,
+                    c.chatHudEnabled, c.chatHudScale, c.chatHudChroma, c.chatHudColor, c.chatHudBgColor, c.chatHudBgOpacity,
+                    "Renders recent chat with adjustable background transparency (set Bg Opacity to 0% for clear chat).", 22,
+                    new Runnable() {
+                        public void run() {
+                            c.chatHudMaxLines = drawSliderRow(530, extraX, extraY, extraW, "Max Visible Lines",
+                                    c.chatHudMaxLines, 3, 16, c.chatHudMaxLines + " lines",
+                                    "Number of recent chat messages displayed in the custom chat box.", extraMx, extraMy);
+                        }
+                    },
+                    new HudWidgetConsumer() {
+                        public void apply(boolean en, int sc, boolean ch, int tc, int bc, int bo) {
+                            c.chatHudEnabled = en; c.chatHudScale = sc; c.chatHudChroma = ch;
+                            c.chatHudColor = tc; c.chatHudBgColor = bc; c.chatHudBgOpacity = bo;
+                        }
+                    });
+        }
+
+        // Custom Tab List
+        if (matchesFilter(filter, "hud tab player list overlay color chroma scale background opacity")) {
+            y = renderHudWidgetCard(6, "Custom Tab List", x, y, w, mx, my,
+                    c.tabHudEnabled, c.tabHudScale, c.tabHudChroma, c.tabHudColor, c.tabHudBgColor, c.tabHudBgOpacity,
+                    "Displays a styled player list overlay while holding TAB.", 0, null,
+                    new HudWidgetConsumer() {
+                        public void apply(boolean en, int sc, boolean ch, int tc, int bc, int bo) {
+                            c.tabHudEnabled = en; c.tabHudScale = sc; c.tabHudChroma = ch;
+                            c.tabHudColor = tc; c.tabHudBgColor = bc; c.tabHudBgOpacity = bo;
+                        }
+                    });
+        }
+
+        // Parody Corner HUD cards
         if (matchesFilter(filter, "hud parody corner arraylist text position padding scale sort width")) {
             int cardH = 158;
             drawCard(x, y, w, cardH, "Parody HUD Layout & Placement");
@@ -595,11 +777,11 @@ public class HitJumpConfigScreen extends Screen {
                     "Automatically orders lines from longest to shortest (or reversed on bottom corners).", mx, my);
             iy += 22;
             c.parodyOffsetX = drawSliderRow(501, x + 10, iy, w - 20, "Edge Padding X",
-                    c.parodyOffsetX, 0, 150, c.parodyOffsetX + "px",
+                    c.parodyOffsetX, 0, 300, c.parodyOffsetX + "px",
                     "Nudges the HUD list inward from the left or right edge of your screen.", mx, my);
             iy += 22;
             c.parodyOffsetY = drawSliderRow(502, x + 10, iy, w - 20, "Edge Padding Y",
-                    c.parodyOffsetY, 0, 150, c.parodyOffsetY + "px",
+                    c.parodyOffsetY, 0, 300, c.parodyOffsetY + "px",
                     "Nudges the HUD list down or up so it never overlaps scoreboards or keystrokes.", mx, my);
             iy += 22;
             c.parodyScale = drawSliderRow(503, x + 10, iy, w - 20, "Text Scale",
@@ -709,6 +891,51 @@ public class HitJumpConfigScreen extends Screen {
             y += cardH + 8;
         }
         return y;
+    }
+
+    // Shared helper fields for extra rows inside HUD widget cards
+    private int extraX, extraY, extraW, extraMx, extraMy;
+
+    private int renderHudWidgetCard(
+            int widgetIdx, String title, int x, int y, int w, int mx, int my,
+            boolean enabled, int scale, boolean chroma, int textColor, int bgColor, int bgOpacity,
+            String info, int extraHeight, Runnable extraRows, HudWidgetConsumer out
+    ) {
+        int cardH = 224 + extraHeight;
+        drawCard(x, y, w, cardH, title);
+        int iy = y + 24;
+        enabled = drawToggleRow(x + 10, iy, w - 20, title + " HUD", enabled, true, info, mx, my);
+        iy += 22;
+        if (extraRows != null && extraHeight > 0) {
+            this.extraX = x + 10; this.extraY = iy; this.extraW = w - 20;
+            this.extraMx = mx; this.extraMy = my;
+            extraRows.run();
+            iy += extraHeight;
+        }
+        scale = drawSliderRow(520 + widgetIdx, x + 10, iy, w - 20, "Text Scale",
+                scale, 50, 200, String.format("%.2fx", scale / 100.0F),
+                "Scales this HUD widget from 0.50x to 2.00x (also adjustable via mouse wheel in HUD Editor).", mx, my);
+        iy += 22;
+        chroma = drawToggleRow(x + 10, iy, w - 20, "Chroma Wave Effect", chroma, false,
+                "Cycles a smooth rainbow gradient on this widget's text.", mx, my);
+        iy += 22;
+        boolean editBg = this.hudEditBgColor[widgetIdx];
+        if (drawCycleRow(x + 10, iy, w - 20, "Color Picker Target",
+                editBg ? "Background" : "Text Color",
+                "Switch the color picker below between editing Text Color or Background Color.", mx, my)) {
+            this.hudEditBgColor[widgetIdx] = !editBg;
+            editBg = !editBg;
+        }
+        iy += 24;
+        int pickerId = editBg ? (13 + widgetIdx) : (6 + widgetIdx);
+        int activeRgb = editBg ? bgColor : textColor;
+        int[] res = drawInlineColorPicker(pickerId, x + 10, iy, w - 20, activeRgb, bgOpacity, null, mx, my);
+        if (editBg) bgColor = res[0];
+        else textColor = res[0];
+        bgOpacity = res[1];
+
+        out.apply(enabled, scale, chroma, textColor, bgColor, bgOpacity);
+        return y + cardH + 8;
     }
 
     private int renderAudioTab(final HitJumpConfig c, int x, int y, int w, int mx, int my, String filter) {
@@ -952,6 +1179,10 @@ public class HitJumpConfigScreen extends Screen {
         boolean hasAlpha = (opacityOrNeg >= 0);
         int alphaY = y + svH + 6, alphaW = svW + 6 + hueW, alphaH = 14;
 
+        boolean isHudTextPicker = (pickerId == 4 || (pickerId >= 6 && pickerId <= 12));
+        boolean isHudBgPicker = (pickerId >= 13 && pickerId <= 19);
+        boolean isBgOpacityBar = isHudTextPicker || isHudBgPicker;
+
         int dragSv = pickerId * 10 + 1, dragHue = pickerId * 10 + 2, dragAlpha = pickerId * 10 + 3;
 
         if (this.leftJustClicked && this.mouseInViewport) {
@@ -1042,18 +1273,19 @@ public class HitJumpConfigScreen extends Screen {
             int midX = infoX + infoW / 2;
             drawQuad(midX - tw / 2 - 4, y + 11, midX + tw / 2 + 4, y + 25, cr, cg, cb, ca);
         } else {
-            drawQuad(infoX + 4, y + 4, infoX + infoW - 4, y + 32, cr, cg, cb, hasAlpha && pickerId != 4 ? ca : 1.0F);
+            float swatchAlpha = (hasAlpha && !isHudTextPicker) ? ca : 1.0F;
+            drawQuad(infoX + 4, y + 4, infoX + infoW - 4, y + 32, cr, cg, cb, swatchAlpha);
         }
 
         GL11.glPopAttrib();
 
         if (previewName != null) this.drawCenteredString(this.textRenderer, previewName, infoX + infoW / 2, y + 14, 0xFFFFFF);
         if (hasAlpha) {
-            String alphaLabel = (pickerId == 4 ? "Bg Opacity: " : "Opacity: ") + opacityOrNeg + "%";
+            String alphaLabel = (isBgOpacityBar ? "Bg Opacity: " : "Opacity: ") + opacityOrNeg + "%";
             this.drawCenteredString(this.textRenderer, alphaLabel, x + alphaW / 2, alphaY + 3, 0xFFFFFF);
         }
         drawLeftText(String.format("Hex: #%06X", curRgb), infoX, y + 44, 0xD0D4DC);
-        if (hasAlpha) drawLeftText((pickerId == 4 ? "Bg: " : "Alpha: ") + opacityOrNeg + "%", infoX, y + 58, 0xA8B0BC);
+        if (hasAlpha) drawLeftText((isBgOpacityBar ? "Bg: " : "Alpha: ") + opacityOrNeg + "%", infoX, y + 58, 0xA8B0BC);
         return new int[]{curRgb, opacityOrNeg};
     }
 
