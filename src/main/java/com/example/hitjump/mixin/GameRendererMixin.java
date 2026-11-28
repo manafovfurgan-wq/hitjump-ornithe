@@ -15,12 +15,23 @@ public class GameRendererMixin {
         HitJumpMod.syncHeadYaw();
     }
 
-    @Inject(method = "renderWorld", at = @At("HEAD"), require = 0)
+    @Inject(method = "renderWorld(FJ)V", at = @At("HEAD"), require = 0)
     private void hitjump$onRenderWorldHead(float tickDelta, long limitTime, CallbackInfo ci) {
         HitJumpMod.syncHeadYaw();
     }
 
-    @Inject(method = "renderWorld", at = @At("TAIL"), require = 0)
+    // Fires right before vanilla clears the depth buffer for the first-person hand
+    @Inject(method = "renderWorld(IFJ)V", at = @At(value = "CONSTANT", args = "stringValue=hand"), require = 0)
+    private void hitjump$onRenderWorldBeforeHand(int pass, float tickDelta, long limitTime, CallbackInfo ci) {
+        HitJumpMod.onRenderWorldBeforeHand(tickDelta);
+    }
+
+    @Inject(method = "renderWorldPass(IFJ)V", at = @At(value = "CONSTANT", args = "stringValue=hand"), require = 0)
+    private void hitjump$onRenderWorldPassBeforeHand(int pass, float tickDelta, long limitTime, CallbackInfo ci) {
+        HitJumpMod.onRenderWorldBeforeHand(tickDelta);
+    }
+
+    @Inject(method = "renderWorld(FJ)V", at = @At("TAIL"), require = 0)
     private void hitjump$onRenderWorldTail(float tickDelta, long limitTime, CallbackInfo ci) {
         HitJumpMod.onRenderWorldTail(tickDelta);
         ParodyHudRenderer.renderInWorld();
