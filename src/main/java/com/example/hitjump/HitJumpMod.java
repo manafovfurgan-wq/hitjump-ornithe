@@ -152,7 +152,9 @@ public class HitJumpMod implements ClientModInitializer {
         HitJumpConfig config = HitJumpConfig.getInstance();
 
         // Sound Mixer runs every tick
-        SoundMixer.processActiveSounds(client);
+		SoundMixer.processActiveSounds(client);
+        HudSuiteRenderer.pollInputs();
+        BedwarsAdvisor.tick(client);
 
         // Night Vision / Fullbright (gamma override)
         applyNightVision(client, config);
