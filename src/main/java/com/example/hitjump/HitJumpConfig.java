@@ -70,6 +70,7 @@ public class HitJumpConfig {
 
     // Building: GodPlace (-98 = Middle Mouse / Button 3)
     public boolean godPlaceEnabled = true;
+    public int godPlaceMode = 0; // 0 = Regular, 1 = Face-Lock (Straight Line)
     public int godPlaceDelayTicks = 0;
     public int godPlaceKeyCode = -98;
 
@@ -79,6 +80,17 @@ public class HitJumpConfig {
     public boolean hitboxEyeLineEnabled = true;
     public int hitboxTargetMode = 0; // 0 = Players & Mobs, 1 = Players Only, 2 = All Entities
     public int hitboxRange = 64;
+
+    // Visuals: Hitbox Animations ("Ragebait Aura")
+    public boolean hitboxAnimEnabled = false;
+    public int hitboxAnimStyle = 0; // 0=Target Ring, 1=Orbiting Halo, 2=Double Helix, 3=Lock-On Brackets, 4=Vortex Rings
+    public int hitboxAnimColor = 0x55D4FF;
+    public boolean hitboxAnimChroma = true;
+    public int hitboxAnimSpeed = 100; // 25..300 -> 0.25x..3.00x
+    public int hitboxAnimRadiusPad = 8; // 0..40 -> 0.00..0.40 blocks
+    public int hitboxAnimLineWidth = 22; // 10..50 -> 1.0px..5.0px
+    public boolean hitboxAnimFadeIn = true;
+    public boolean hitboxAnimShowSelf = false;
 
     public boolean invisHitboxEnabled = true;
     public int invisHitboxColor = 0xFF2626;
@@ -96,19 +108,49 @@ public class HitJumpConfig {
     public int blockOverlayColor = 0xFFFFFF;
     public int blockOverlayOpacity = 30;
 
+    // Visuals: Particle Optimizer (Sharpness & Crits)
+    public boolean particleOptEnabled = false;
+    public int critParticleAmount = 100; // 0..500% (0x..5x)
+    public int critParticleScale = 100;  // 25..250% (0.25x..2.50x)
+    public int sharpParticleAmount = 100; // 0..500% (0x..5x)
+    public int sharpParticleScale = 100;  // 25..250% (0.25x..2.50x)
+
+    // Visuals: Time Changer & Weather Changer
+    public boolean timeChangerEnabled = false;
+    public int customTimeTicks = 6000; // 0..24000 (6000 = Noon)
+    public int weatherMode = 0; // 0 = Server Default, 1 = Clear, 2 = Rain, 3 = Thunder
+
+    // Visuals: Companion Pets (Client-Side Followers)
+    public boolean petBunnyEnabled = false;
+    public int petBunnyScale = 100; // 50..200%
+    public boolean petDragonEnabled = false;
+    public int petDragonScale = 100; // 50..200%
+    public boolean petsShowFirstPerson = true;
+
     // Visuals: Night Vision / Fullbright
     public boolean nightVisionEnabled = false;
 
-    // Visuals: Nametags, Distance, Armor, TNT, Hit Color, Inventory, Parallax
+    // Visuals: Nametags, Standalone Distance, Enchants, TNT, Hit Color, Inventory, Parallax
     public boolean wallNametagsEnabled = true;
+    public boolean overrideVanillaNametags = true;
+    public int nametagTargetMode = 1; // 0 = Players & Mobs, 1 = Players Only, 2 = All Entities
+    public boolean nametagIgnoreHolograms = true;
     public int nametagRange = 128;
     public int nametagBgColor = 0x000000;
     public int nametagBgOpacity = 35;
 
+    // Standalone Distance Tag
     public boolean showDistanceTag = true;
+    public int distanceRange = 128;
+    public int distanceOffsetY = 0; // -24..+24 px
     public boolean distanceUnitBlocks = false;
 
+    // Enchantment Info (Armor + Held Weapon Sharpness)
     public boolean armorEnchantInfoEnabled = true;
+    public boolean enchantShowWeapon = true;
+    public int enchantRange = 48;
+    public int enchantOffsetY = 0; // -24..+24 px
+
     public boolean tntTimerEnabled = true;
 
     public boolean customHitColorEnabled = false;
@@ -126,7 +168,7 @@ public class HitJumpConfig {
 
     // HUD: Parody Corner List
     public boolean parodyHudEnabled = true;
-    public int parodyCorner = 1; // 0 = Top-Left, 1 = Top-Right, 2 = Bottom-Left, 3 = Bottom-Right
+    public int parodyCorner = 1;
     public boolean parodySortByWidth = true;
     public int parodyOffsetX = 6;
     public int parodyOffsetY = 6;
@@ -140,7 +182,7 @@ public class HitJumpConfig {
     public boolean parodyChromaWave = false;
     public List<ParodyLine> parodyLines = createDefaultParodyLines();
 
-    // HUD Wave 2: FPS
+    // HUD: FPS
     public boolean fpsHudEnabled = true;
     public int fpsX = 6;
     public int fpsY = 126;
@@ -150,9 +192,9 @@ public class HitJumpConfig {
     public int fpsBgColor = 0x000000;
     public int fpsBgOpacity = 40;
 
-    // HUD Wave 2: CPS
+    // HUD: CPS
     public boolean cpsHudEnabled = true;
-    public int cpsMode = 0; // 0 = LMB | RMB, 1 = LMB Only, 2 = RMB Only
+    public int cpsMode = 0;
     public int cpsX = 6;
     public int cpsY = 144;
     public int cpsScale = 100;
@@ -161,26 +203,33 @@ public class HitJumpConfig {
     public int cpsBgColor = 0x000000;
     public int cpsBgOpacity = 40;
 
-    // HUD Wave 2: Keystrokes
+    // HUD: Modular Keystrokes (WASD, Mouse LMB/RMB, Spacebar separable)
     public boolean keystrokesEnabled = true;
+    public boolean keystrokesShowWasd = true;
+    public boolean keystrokesShowMouse = true;
     public boolean keystrokesShowCps = true;
     public boolean keystrokesShowSpace = true;
+    public boolean keystrokesSplitPieces = false;
     public int keystrokesX = 6;
     public int keystrokesY = 164;
+    public int keystrokesMouseX = 6;
+    public int keystrokesMouseY = 208;
+    public int keystrokesSpaceX = 6;
+    public int keystrokesSpaceY = 228;
     public int keystrokesScale = 100;
     public int keystrokesColor = 0xFFFFFF;
     public boolean keystrokesChroma = false;
     public int keystrokesBgColor = 0x000000;
     public int keystrokesBgOpacity = 45;
 
-    // HUD Wave 2: Bedrock Mini-Player (Paper Doll)
+    // HUD: Bedrock Mini-Player (Paper Doll)
     public boolean paperDollEnabled = true;
-    public boolean paperDollDynamic = true; // true = Bedrock Dynamic, false = Always Visible
+    public boolean paperDollDynamic = true;
     public int paperDollX = 28;
     public int paperDollY = 58;
     public int paperDollScale = 100;
 
-    // HUD Wave 2: Bedwars Strategy Tips Box
+    // HUD: Bedwars Strategy Tips Box
     public boolean bedwarsTipsEnabled = true;
     public boolean bedwarsTipsDemo = false;
     public int bedwarsTipsX = 6;
@@ -191,10 +240,10 @@ public class HitJumpConfig {
     public int bedwarsTipsBgColor = 0x000000;
     public int bedwarsTipsBgOpacity = 45;
 
-    // HUD Wave 2: Custom Scoreboard (Sidebar)
+    // HUD: Custom Scoreboard (Sidebar)
     public boolean scoreboardHudEnabled = false;
     public boolean scoreboardHideNumbers = true;
-    public int scoreboardX = -1; // -1 = auto right edge
+    public int scoreboardX = -1;
     public int scoreboardY = 120;
     public int scoreboardScale = 100;
     public int scoreboardColor = 0xFFFFFF;
@@ -202,10 +251,10 @@ public class HitJumpConfig {
     public int scoreboardBgColor = 0x000000;
     public int scoreboardBgOpacity = 40;
 
-    // HUD Wave 2: Custom Chat Box
+    // HUD: Custom Chat Box
     public boolean chatHudEnabled = false;
     public int chatHudX = 6;
-    public int chatHudY = -1; // -1 = auto above hotbar
+    public int chatHudY = -1;
     public int chatHudScale = 100;
     public int chatHudColor = 0xFFFFFF;
     public boolean chatHudChroma = false;
@@ -213,9 +262,9 @@ public class HitJumpConfig {
     public int chatHudBgOpacity = 25;
     public int chatHudMaxLines = 8;
 
-    // HUD Wave 2: Custom Tab Overlay
+    // HUD: Custom Tab Overlay
     public boolean tabHudEnabled = false;
-    public int tabHudX = -1; // -1 = auto center
+    public int tabHudX = -1;
     public int tabHudY = 14;
     public int tabHudScale = 100;
     public int tabHudColor = 0xFFFFFF;
@@ -225,36 +274,12 @@ public class HitJumpConfig {
 
     // Audio: Sound Mixer
     public boolean soundMixerEnabled = true;
-
-    public boolean soundHitEnabled = true;
-    public boolean soundHitMuted = false;
-    public int soundHitVolume = 100;
-    public int soundHitPitch = 100;
-
-    public boolean soundExplosionEnabled = true;
-    public boolean soundExplosionMuted = false;
-    public int soundExplosionVolume = 100;
-    public int soundExplosionPitch = 100;
-
-    public boolean soundLightningEnabled = true;
-    public boolean soundLightningMuted = false;
-    public int soundLightningVolume = 100;
-    public int soundLightningPitch = 100;
-
-    public boolean soundRainEnabled = false;
-    public boolean soundRainMuted = false;
-    public int soundRainVolume = 100;
-    public int soundRainPitch = 100;
-
-    public boolean soundPortalEnabled = false;
-    public boolean soundPortalMuted = false;
-    public int soundPortalVolume = 100;
-    public int soundPortalPitch = 100;
-
-    public boolean soundGhastEnabled = false;
-    public boolean soundGhastMuted = false;
-    public int soundGhastVolume = 100;
-    public int soundGhastPitch = 100;
+    public boolean soundHitEnabled = true; public boolean soundHitMuted = false; public int soundHitVolume = 100; public int soundHitPitch = 100;
+    public boolean soundExplosionEnabled = true; public boolean soundExplosionMuted = false; public int soundExplosionVolume = 100; public int soundExplosionPitch = 100;
+    public boolean soundLightningEnabled = true; public boolean soundLightningMuted = false; public int soundLightningVolume = 100; public int soundLightningPitch = 100;
+    public boolean soundRainEnabled = false; public boolean soundRainMuted = false; public int soundRainVolume = 100; public int soundRainPitch = 100;
+    public boolean soundPortalEnabled = false; public boolean soundPortalMuted = false; public int soundPortalVolume = 100; public int soundPortalPitch = 100;
+    public boolean soundGhastEnabled = false; public boolean soundGhastMuted = false; public int soundGhastVolume = 100; public int soundGhastPitch = 100;
 
     // Settings: Anti-Accidental Menu Trigger
     public int menuKeyCode = Keyboard.KEY_H;
@@ -307,106 +332,73 @@ public class HitJumpConfig {
     }
 
     public void resetDefaults() {
-        this.enabled = true;
-        this.hitJumpPlayersOnly = true;
-        this.jumpFrequency = 100;
-        this.latencyTicks = 0;
+        this.enabled = true; this.hitJumpPlayersOnly = true; this.jumpFrequency = 100; this.latencyTicks = 0;
+        this.noHitDelayEnabled = true; this.hitDelayTicks = 0;
+        this.noJumpDelayEnabled = true; this.jumpDelayTicks = 0;
+        this.toggleSprintEnabled = true; this.toggleSprintActive = true; this.toggleSprintKeyCode = Keyboard.KEY_G;
+        this.keepMovingAfterGuiEnabled = true; this.noScrollEnabled = false;
+        this.noSlowEnabled = false; this.noSlowItems = true; this.noSlowCobwebs = true; this.noSlowSoulSand = true;
 
-        this.noHitDelayEnabled = true;
-        this.hitDelayTicks = 0;
+        this.godPlaceEnabled = true; this.godPlaceMode = 0; this.godPlaceDelayTicks = 0; this.godPlaceKeyCode = -98;
 
-        this.noJumpDelayEnabled = true;
-        this.jumpDelayTicks = 0;
+        this.wallHitboxesEnabled = true; this.hitboxThroughWalls = true; this.hitboxEyeLineEnabled = true;
+        this.hitboxTargetMode = 0; this.hitboxRange = 64;
 
-        this.toggleSprintEnabled = true;
-        this.toggleSprintActive = true;
-        this.toggleSprintKeyCode = Keyboard.KEY_G;
-        this.keepMovingAfterGuiEnabled = true;
-        this.noScrollEnabled = false;
+        this.hitboxAnimEnabled = false; this.hitboxAnimStyle = 0; this.hitboxAnimColor = 0x55D4FF;
+        this.hitboxAnimChroma = true; this.hitboxAnimSpeed = 100; this.hitboxAnimRadiusPad = 8;
+        this.hitboxAnimLineWidth = 22; this.hitboxAnimFadeIn = true; this.hitboxAnimShowSelf = false;
 
-        this.noSlowEnabled = false;
-        this.noSlowItems = true;
-        this.noSlowCobwebs = true;
-        this.noSlowSoulSand = true;
+        this.invisHitboxEnabled = true; this.invisHitboxColor = 0xFF2626;
 
-        this.godPlaceEnabled = true;
-        this.godPlaceDelayTicks = 0;
-        this.godPlaceKeyCode = -98;
+        this.blockOutlineEnabled = true; this.blockOutlineFullBlock = false; this.blockOutlineWidth = 20;
+        this.blockOutlineColor = 0xFFFFFF; this.blockOutlineOpacity = 85;
 
-        this.wallHitboxesEnabled = true;
-        this.hitboxThroughWalls = true;
-        this.hitboxEyeLineEnabled = true;
-        this.hitboxTargetMode = 0;
-        this.hitboxRange = 64;
+        this.blockOverlayEnabled = false; this.blockOverlayFaceOnly = true; this.blockOverlayBlendMode = 0;
+        this.blockOverlayColor = 0xFFFFFF; this.blockOverlayOpacity = 30;
 
-        this.invisHitboxEnabled = true;
-        this.invisHitboxColor = 0xFF2626;
+        this.particleOptEnabled = false;
+        this.critParticleAmount = 100; this.critParticleScale = 100;
+        this.sharpParticleAmount = 100; this.sharpParticleScale = 100;
 
-        this.blockOutlineEnabled = true;
-        this.blockOutlineFullBlock = false;
-        this.blockOutlineWidth = 20;
-        this.blockOutlineColor = 0xFFFFFF;
-        this.blockOutlineOpacity = 85;
+        this.timeChangerEnabled = false; this.customTimeTicks = 6000; this.weatherMode = 0;
 
-        this.blockOverlayEnabled = false;
-        this.blockOverlayFaceOnly = true;
-        this.blockOverlayBlendMode = 0;
-        this.blockOverlayColor = 0xFFFFFF;
-        this.blockOverlayOpacity = 30;
+        this.petBunnyEnabled = false; this.petBunnyScale = 100;
+        this.petDragonEnabled = false; this.petDragonScale = 100;
+        this.petsShowFirstPerson = true;
 
         this.nightVisionEnabled = false;
 
-        this.wallNametagsEnabled = true;
-        this.nametagRange = 128;
-        this.nametagBgColor = 0x000000;
-        this.nametagBgOpacity = 35;
+        this.wallNametagsEnabled = true; this.overrideVanillaNametags = true;
+        this.nametagTargetMode = 1; this.nametagIgnoreHolograms = true;
+        this.nametagRange = 128; this.nametagBgColor = 0x000000; this.nametagBgOpacity = 35;
 
-        this.showDistanceTag = true;
-        this.distanceUnitBlocks = false;
-
-        this.armorEnchantInfoEnabled = true;
+        this.showDistanceTag = true; this.distanceRange = 128; this.distanceOffsetY = 0; this.distanceUnitBlocks = false;
+        this.armorEnchantInfoEnabled = true; this.enchantShowWeapon = true; this.enchantRange = 48; this.enchantOffsetY = 0;
         this.tntTimerEnabled = true;
 
-        this.customHitColorEnabled = false;
-        this.customHitColor = 0xFFFFFF;
-        this.customHitOpacity = 45;
+        this.customHitColorEnabled = false; this.customHitColor = 0xFFFFFF; this.customHitOpacity = 45;
+        this.centerInventoryEnabled = true; this.parallaxFixEnabled = true;
 
-        this.centerInventoryEnabled = true;
-        this.parallaxFixEnabled = true;
+        this.noSwapDipEnabled = true; this.blockhitAnimEnabled = true; this.smoothSneakEnabled = true; this.headFixEnabled = true;
 
-        this.noSwapDipEnabled = true;
-        this.blockhitAnimEnabled = true;
-        this.smoothSneakEnabled = true;
-        this.headFixEnabled = true;
+        this.parodyHudEnabled = true; this.parodyCorner = 1; this.parodySortByWidth = true;
+        this.parodyOffsetX = 6; this.parodyOffsetY = 6; this.parodyScale = 100;
+        this.parodyTextColor = 0xFFFFFF; this.parodyTextShadow = true; this.parodyShowHeader = true;
+        this.parodyHeaderText = "Skill Issue+"; this.parodyShowBackground = true; this.parodyBgOpacity = 35;
+        this.parodyChromaWave = false; this.parodyLines = createDefaultParodyLines();
 
-        this.parodyHudEnabled = true;
-        this.parodyCorner = 1;
-        this.parodySortByWidth = true;
-        this.parodyOffsetX = 6;
-        this.parodyOffsetY = 6;
-        this.parodyScale = 100;
-        this.parodyTextColor = 0xFFFFFF;
-        this.parodyTextShadow = true;
-        this.parodyShowHeader = true;
-        this.parodyHeaderText = "Skill Issue+";
-        this.parodyShowBackground = true;
-        this.parodyBgOpacity = 35;
-        this.parodyChromaWave = false;
-        this.parodyLines = createDefaultParodyLines();
+        this.fpsHudEnabled = true; this.fpsX = 6; this.fpsY = 126; this.fpsScale = 100;
+        this.fpsColor = 0xFFFFFF; this.fpsChroma = false; this.fpsBgColor = 0x000000; this.fpsBgOpacity = 40;
 
-        this.fpsHudEnabled = true;
-        this.fpsX = 6; this.fpsY = 126; this.fpsScale = 100;
-        this.fpsColor = 0xFFFFFF; this.fpsChroma = false;
-        this.fpsBgColor = 0x000000; this.fpsBgOpacity = 40;
+        this.cpsHudEnabled = true; this.cpsMode = 0; this.cpsX = 6; this.cpsY = 144; this.cpsScale = 100;
+        this.cpsColor = 0xFFFFFF; this.cpsChroma = false; this.cpsBgColor = 0x000000; this.cpsBgOpacity = 40;
 
-        this.cpsHudEnabled = true; this.cpsMode = 0;
-        this.cpsX = 6; this.cpsY = 144; this.cpsScale = 100;
-        this.cpsColor = 0xFFFFFF; this.cpsChroma = false;
-        this.cpsBgColor = 0x000000; this.cpsBgOpacity = 40;
-
-        this.keystrokesEnabled = true; this.keystrokesShowCps = true; this.keystrokesShowSpace = true;
-        this.keystrokesX = 6; this.keystrokesY = 164; this.keystrokesScale = 100;
-        this.keystrokesColor = 0xFFFFFF; this.keystrokesChroma = false;
+        this.keystrokesEnabled = true; this.keystrokesShowWasd = true; this.keystrokesShowMouse = true;
+        this.keystrokesShowCps = true; this.keystrokesShowSpace = true; this.keystrokesSplitPieces = false;
+        this.keystrokesX = 6; this.keystrokesY = 164;
+        this.keystrokesMouseX = 6; this.keystrokesMouseY = 208;
+        this.keystrokesSpaceX = 6; this.keystrokesSpaceY = 228;
+        this.keystrokesScale = 100; this.keystrokesColor = 0xFFFFFF; this.keystrokesChroma = false;
         this.keystrokesBgColor = 0x000000; this.keystrokesBgOpacity = 45;
 
         this.paperDollEnabled = true; this.paperDollDynamic = true;
@@ -427,8 +419,7 @@ public class HitJumpConfig {
         this.chatHudColor = 0xFFFFFF; this.chatHudChroma = false;
         this.chatHudBgColor = 0x000000; this.chatHudBgOpacity = 25;
 
-        this.tabHudEnabled = false;
-        this.tabHudX = -1; this.tabHudY = 14; this.tabHudScale = 100;
+        this.tabHudEnabled = false; this.tabHudX = -1; this.tabHudY = 14; this.tabHudScale = 100;
         this.tabHudColor = 0xFFFFFF; this.tabHudChroma = false;
         this.tabHudBgColor = 0x000000; this.tabHudBgOpacity = 50;
 
@@ -440,9 +431,7 @@ public class HitJumpConfig {
         this.soundPortalEnabled = false; this.soundPortalMuted = false; this.soundPortalVolume = 100; this.soundPortalPitch = 100;
         this.soundGhastEnabled = false; this.soundGhastMuted = false; this.soundGhastVolume = 100; this.soundGhastPitch = 100;
 
-        this.menuKeyCode = Keyboard.KEY_H;
-        this.menuTriggerMode = 0;
-        this.menuModifierKey = Keyboard.KEY_LCONTROL;
+        this.menuKeyCode = Keyboard.KEY_H; this.menuTriggerMode = 0; this.menuModifierKey = Keyboard.KEY_LCONTROL;
     }
 
     public void clampValues() {
@@ -450,14 +439,20 @@ public class HitJumpConfig {
         latencyTicks = clamp(latencyTicks, 0, 10);
         jumpDelayTicks = clamp(jumpDelayTicks, 0, 10);
         hitDelayTicks = clamp(hitDelayTicks, 0, 10);
+        godPlaceMode = clamp(godPlaceMode, 0, 1);
         godPlaceDelayTicks = clamp(godPlaceDelayTicks, 0, 3);
 
         if (!isValidBind(godPlaceKeyCode)) godPlaceKeyCode = -98;
         if (!isValidBind(toggleSprintKeyCode)) toggleSprintKeyCode = Keyboard.KEY_G;
 
         hitboxTargetMode = clamp(hitboxTargetMode, 0, 2);
-        hitboxRange = clamp(hitboxRange, 8, 256);
-        nametagRange = clamp(nametagRange, 16, 256);
+        hitboxRange = clamp(hitboxRange, 4, 256);
+
+        hitboxAnimStyle = clamp(hitboxAnimStyle, 0, 4);
+        hitboxAnimColor &= 0xFFFFFF;
+        hitboxAnimSpeed = clamp(hitboxAnimSpeed, 25, 300);
+        hitboxAnimRadiusPad = clamp(hitboxAnimRadiusPad, 0, 40);
+        hitboxAnimLineWidth = clamp(hitboxAnimLineWidth, 10, 50);
 
         invisHitboxColor &= 0xFFFFFF;
         blockOutlineWidth = clamp(blockOutlineWidth, 5, 80);
@@ -466,8 +461,29 @@ public class HitJumpConfig {
         blockOverlayBlendMode = clamp(blockOverlayBlendMode, 0, 2);
         blockOverlayColor &= 0xFFFFFF;
         blockOverlayOpacity = clamp(blockOverlayOpacity, 0, 100);
+
+        critParticleAmount = clamp(critParticleAmount, 0, 500);
+        critParticleScale = clamp(critParticleScale, 25, 250);
+        sharpParticleAmount = clamp(sharpParticleAmount, 0, 500);
+        sharpParticleScale = clamp(sharpParticleScale, 25, 250);
+
+        customTimeTicks = clamp(customTimeTicks, 0, 24000);
+        weatherMode = clamp(weatherMode, 0, 3);
+
+        petBunnyScale = clamp(petBunnyScale, 50, 200);
+        petDragonScale = clamp(petDragonScale, 50, 200);
+
+        nametagTargetMode = clamp(nametagTargetMode, 0, 2);
+        nametagRange = clamp(nametagRange, 8, 256);
         nametagBgColor &= 0xFFFFFF;
         nametagBgOpacity = clamp(nametagBgOpacity, 0, 100);
+
+        distanceRange = clamp(distanceRange, 8, 256);
+        distanceOffsetY = clamp(distanceOffsetY, -24, 24);
+
+        enchantRange = clamp(enchantRange, 4, 128);
+        enchantOffsetY = clamp(enchantOffsetY, -24, 24);
+
         customHitColor &= 0xFFFFFF;
         customHitOpacity = clamp(customHitOpacity, 0, 100);
 
