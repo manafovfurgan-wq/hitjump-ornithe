@@ -31,7 +31,7 @@ public class ParodyHudRenderer {
         if (client == null || client.player == null || client.world == null) {
             return;
         }
-        // HitJumpConfigScreen draws its own bright live preview over the background dim
+        // HitJumpConfigScreen draws its own live preview behind the menu
         if (client.screen instanceof HitJumpConfigScreen) {
             return;
         }
@@ -51,7 +51,7 @@ public class ParodyHudRenderer {
             return;
         }
 
-        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_LIGHTING_BIT);
         GL11.glMatrixMode(GL11.GL_PROJECTION);
         GL11.glPushMatrix();
         GL11.glLoadIdentity();
@@ -84,7 +84,7 @@ public class ParodyHudRenderer {
             return;
         }
 
-        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_LIGHTING_BIT);
         GL11.glPushMatrix();
         try {
             renderOverlay(client, config, screenW, screenH);
@@ -204,6 +204,7 @@ public class ParodyHudRenderer {
         float y0 = rowY;
         float y1 = rowY + rowH;
 
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_CURRENT_BIT);
         GL11.glDisable(GL11.GL_TEXTURE_2D);
         GL11.glColor4f(0.04F, 0.05F, 0.07F, bgAlpha);
         GL11.glBegin(GL11.GL_QUADS);
@@ -226,6 +227,7 @@ public class ParodyHudRenderer {
         GL11.glVertex2f(barX1, y1);
         GL11.glVertex2f(barX1, y0);
         GL11.glEnd();
+        GL11.glPopAttrib();
     }
 
     private static int getLineColor(HitJumpConfig config, int index) {
@@ -250,7 +252,6 @@ public class ParodyHudRenderer {
 
     private static void drawText(String text, int x, int y, int color, boolean shadow) {
         GL11.glEnable(GL11.GL_TEXTURE_2D);
-        GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
         try {
             if (shadow && textDrawShadowMethod != null) {
                 textDrawShadowMethod.invoke(textRendererObj, text, (float) x, (float) y, color);
