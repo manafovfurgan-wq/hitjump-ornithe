@@ -1,6 +1,7 @@
 package com.example.hitjump.mixin;
 
 import com.example.hitjump.HitJumpMod;
+import com.example.hitjump.ParodyHudRenderer;
 import net.minecraft.client.render.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -22,6 +23,7 @@ public class GameRendererMixin {
     @Inject(method = "renderWorld", at = @At("TAIL"), require = 0)
     private void hitjump$onRenderWorldTail(float tickDelta, long limitTime, CallbackInfo ci) {
         HitJumpMod.onRenderWorldTail(tickDelta);
+        ParodyHudRenderer.renderInWorld();
     }
 
     @Inject(method = "transformCamera", at = @At("HEAD"))
