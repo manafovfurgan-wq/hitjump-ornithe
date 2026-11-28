@@ -290,7 +290,7 @@ public class HitJumpConfigScreen extends Screen {
 
         // Render floating info tooltip on top of everything
         if (this.hoveredTooltip != null) {
-            renderTooltip(this.hoveredTooltip, this.tooltipX, this.tooltipY);
+            drawInfoTooltip(this.hoveredTooltip, this.tooltipX, this.tooltipY);
         }
 
         this.wasLeftDown = curLeft;
@@ -1144,7 +1144,7 @@ public class HitJumpConfigScreen extends Screen {
         return new int[]{curRgb, opacityOrNeg};
     }
 
-    private void renderTooltip(String text, int rawX, int rawY) {
+    private void drawInfoTooltip(String text, int rawX, int rawY) {
         List<String> lines = wrapText(text, 185);
         int maxW = 0;
         for (int i = 0; i < lines.size(); i++) {
