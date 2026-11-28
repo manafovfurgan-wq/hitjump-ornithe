@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class HitJumpConfigScreen extends Screen {
-    private static final String HEADER_TITLE = "Tomato Cream | Main menu";
+    private static final String HEADER_TITLE = "Skill Issue+ v5.0 | Main menu";
     private static final String[] TAB_NAMES = {
             "Combat", "Movement", "Building", "Visuals", "Animations", "HUD", "Audio", "Settings"
     };
@@ -43,26 +43,22 @@ public class HitJumpConfigScreen extends Screen {
     private int scrollOffset = 0;
     private int maxScroll = 0;
 
-    // Mouse / drag state
     private boolean wasLeftDown = false;
     private boolean leftJustClicked = false;
     private boolean leftDown = false;
     private int activeSliderId = -1;
-    private int activePickerDrag = 0; // pickerId * 10 + part (1=SV, 2=Hue, 3=Alpha)
+    private int activePickerDrag = 0;
     private boolean draggingScrollbar = false;
 
-    // Viewport bounds
     private int viewX, viewY, viewW, viewH;
     private boolean mouseInViewport = false;
 
-    // Deferred hover tooltip (drawn above scissor clip)
     private String hoveredTooltip = null;
     private int tooltipX = 0;
     private int tooltipY = 0;
 
-    // HSB state for the 5 inline color pickers:
-    // 0=Invis, 1=Nametag, 2=HitColor, 3=BlockOutline, 4=ParodyHUD
-    private final float[][] pickerHsb = new float[5][3];
+    // 0=Invis, 1=Nametag, 2=HitColor, 3=BlockOutline, 4=ParodyHUD, 5=BlockOverlay
+    private final float[][] pickerHsb = new float[6][3];
 
     public HitJumpConfigScreen(Screen parent) {
         this.parent = parent;
@@ -87,6 +83,7 @@ public class HitJumpConfigScreen extends Screen {
         rgbToPicker(2, c.customHitColor);
         rgbToPicker(3, c.blockOutlineColor);
         rgbToPicker(4, c.parodyTextColor);
+        rgbToPicker(5, c.blockOverlayColor);
     }
 
     private void rgbToPicker(int idx, int rgb) {
@@ -97,39 +94,27 @@ public class HitJumpConfigScreen extends Screen {
     public void render(int mouseX, int mouseY, float tickDelta) {
         HitJumpConfig config = HitJumpConfig.getInstance();
 
-        if (this.waitingBindTarget != 0) {
-            handleKeyRebinding(config);
-        } else {
-            handleTextTyping(config);
-        }
+        if (this.waitingBindTarget != 0) handleKeyRebinding(config);
+        else handleTextTyping(config);
 
         boolean curLeft = false;
-        try {
-            curLeft = Mouse.isButtonDown(0);
-        } catch (Throwable ignored) {
-        }
+        try { curLeft = Mouse.isButtonDown(0); } catch (Throwable ignored) {}
         this.leftJustClicked = curLeft && !this.wasLeftDown;
         this.leftDown = curLeft;
         this.hoveredTooltip = null;
 
         if (!this.leftDown) {
-            if (this.activeSliderId != -1 || this.activePickerDrag != 0) {
-                HitJumpConfig.save();
-            }
+            if (this.activeSliderId != -1 || this.activePickerDrag != 0) HitJumpConfig.save();
             this.activeSliderId = -1;
             this.activePickerDrag = 0;
             this.draggingScrollbar = false;
         }
 
-        // Scroll input
         if (this.waitingBindTarget == 0) {
             try {
                 int wheel = Mouse.getDWheel();
-                if (wheel != 0) {
-                    this.scrollOffset -= (wheel > 0 ? 22 : -22);
-                }
-            } catch (Throwable ignored) {
-            }
+                if (wheel != 0) this.scrollOffset -= (wheel > 0 ? 22 : -22);
+            } catch (Throwable ignored) {}
             if (this.focusedInput == 0) {
                 if (isKeySafe(Keyboard.KEY_DOWN)) this.scrollOffset += 5;
                 if (isKeySafe(Keyboard.KEY_UP)) this.scrollOffset -= 5;
@@ -139,7 +124,6 @@ public class HitJumpConfigScreen extends Screen {
         }
         this.scrollOffset = clampInt(this.scrollOffset, 0, this.maxScroll);
 
-        // Panel geometry
         int panelW = Math.min(552, this.width - 18);
         int panelH = Math.min(316, this.height - 16);
         int panelX = (this.width - panelW) / 2;
@@ -151,27 +135,22 @@ public class HitJumpConfigScreen extends Screen {
         this.viewY = panelY + headerH + 6;
         this.viewW = panelW - sideW - 22;
         this.viewH = panelH - headerH - 12;
-        this.mouseInViewport = mouseX >= viewX && mouseX <= viewX + viewW
-                && mouseY >= viewY && mouseY <= viewY + viewH;
+        this.mouseInViewport = mouseX >= viewX && mouseX <= viewX + viewW && mouseY >= viewY && mouseY <= viewY + viewH;
 
         this.renderBackground();
-
-        // Live Parody HUD preview behind the menu so edits appear immediately
         ParodyHudRenderer.renderPreview(this.width, this.height);
 
-        // Main window frame
         fillRect(panelX - 1, panelY - 1, panelX + panelW + 1, panelY + panelH + 1, 0.30F, 0.32F, 0.36F, 0.95F);
         fillRect(panelX, panelY, panelX + panelW, panelY + panelH, 0.08F, 0.09F, 0.11F, 0.96F);
 
-        // Header bar
         fillRect(panelX, panelY, panelX + panelW, panelY + headerH, 0.11F, 0.12F, 0.15F, 1.0F);
         fillRect(panelX, panelY + headerH - 1, panelX + panelW, panelY + headerH, 0.25F, 0.27F, 0.32F, 1.0F);
         drawLeftText(HEADER_TITLE, panelX + 10, panelY + 9, 0xFFFFFF);
 
-        // Lightweight Search Bar in top header
+        // Search bar
         int closeX = panelX + panelW - 24;
         int closeY = panelY + 4;
-        int searchW = Math.min(180, Math.max(100, panelW - 250));
+        int searchW = Math.min(180, Math.max(100, panelW - 270));
         int searchX = closeX - searchW - 8;
         int searchY = panelY + 4;
         boolean hoverSearch = isInside(mouseX, mouseY, searchX, searchY, searchW, 18);
@@ -184,27 +163,19 @@ public class HitJumpConfigScreen extends Screen {
         int clearSearchX = searchX + searchW - 15;
         boolean hoverClearSearch = hasSearch && isInside(mouseX, mouseY, clearSearchX, searchY, 15, 18);
         if (this.leftJustClicked) {
-            if (hoverClearSearch) {
-                this.searchQuery = "";
-                this.scrollOffset = 0;
-                this.focusedInput = 1;
-            } else if (hoverSearch) {
-                this.focusedInput = 1;
-                this.waitingBindTarget = 0;
-            } else if (this.focusedInput == 1) {
-                this.focusedInput = 0;
-            }
+            if (hoverClearSearch) { this.searchQuery = ""; this.scrollOffset = 0; this.focusedInput = 1; }
+            else if (hoverSearch) { this.focusedInput = 1; this.waitingBindTarget = 0; }
+            else if (this.focusedInput == 1) { this.focusedInput = 0; }
         }
         String searchDisp = hasSearch
                 ? trimToWidth(this.searchQuery, searchW - 22) + (searchFocused && blinkCursor() ? "_" : "")
                 : (searchFocused && blinkCursor() ? "_" : "Search options...");
         drawLeftText(searchDisp, searchX + 5, searchY + 5, hasSearch ? 0xFFFFFF : 0x7A8290);
         if (hasSearch) {
-            this.drawCenteredString(this.textRenderer, "x", clearSearchX + 7, searchY + 5,
-                    hoverClearSearch ? 0xFF7070 : 0xA8B0BC);
+            this.drawCenteredString(this.textRenderer, "x", clearSearchX + 7, searchY + 5, hoverClearSearch ? 0xFF7070 : 0xA8B0BC);
         }
 
-        // Top-right Close ("X") button
+        // Close button
         boolean hoverClose = isInside(mouseX, mouseY, closeX, closeY, 18, 18);
         fillRect(closeX, closeY, closeX + 18, closeY + 18,
                 hoverClose ? 0.65F : 0.20F, hoverClose ? 0.18F : 0.21F, hoverClose ? 0.18F : 0.25F, 1.0F);
@@ -216,7 +187,7 @@ public class HitJumpConfigScreen extends Screen {
             return;
         }
 
-        // Left Sidebar
+        // Sidebar
         fillRect(panelX, panelY + headerH, panelX + sideW, panelY + panelH, 0.06F, 0.07F, 0.09F, 1.0F);
         fillRect(panelX + sideW, panelY + headerH, panelX + sideW + 1, panelY + panelH, 0.22F, 0.24F, 0.28F, 1.0F);
 
@@ -242,7 +213,6 @@ public class HitJumpConfigScreen extends Screen {
             tabY += 23;
         }
 
-        // Pinned Save & Done button at bottom of sidebar
         int saveY = panelY + panelH - 26;
         boolean hoverSave = isInside(mouseX, mouseY, panelX + 8, saveY, sideW - 16, 20);
         fillRect(panelX + 8, saveY, panelX + sideW - 8, saveY + 20,
@@ -255,7 +225,6 @@ public class HitJumpConfigScreen extends Screen {
             return;
         }
 
-        // Scrollable content area with OpenGL Scissor clip
         enableScissor(this.viewX, this.viewY, this.viewW, this.viewH);
         int startY = this.viewY - this.scrollOffset;
         int endY;
@@ -288,7 +257,6 @@ public class HitJumpConfigScreen extends Screen {
 
         renderScrollbar(panelX + panelW - 10, this.viewY, 6, this.viewH, contentH, mouseX, mouseY);
 
-        // Render floating info tooltip on top of everything
         if (this.hoveredTooltip != null) {
             drawInfoTooltip(this.hoveredTooltip, this.tooltipX, this.tooltipY);
         }
@@ -350,6 +318,18 @@ public class HitJumpConfigScreen extends Screen {
     }
 
     private int renderMovementTab(HitJumpConfig c, int x, int y, int w, int mx, int my, String filter) {
+        if (matchesFilter(filter, "movement qol keep moving gui inventory settings resume no scroll hotbar wheel")) {
+            int cardH = 70;
+            drawCard(x, y, w, cardH, "Movement & Input QoL");
+            int iy = y + 24;
+            c.keepMovingAfterGuiEnabled = drawToggleRow(x + 10, iy, w - 20, "Keep Moving After GUI", c.keepMovingAfterGuiEnabled, true,
+                    "Resumes movement immediately when closing inventory, chests, or menus if you are still holding WASD.", mx, my);
+            iy += 22;
+            c.noScrollEnabled = drawToggleRow(x + 10, iy, w - 20, "No Hotbar Scroll", c.noScrollEnabled, true,
+                    "Disables mouse wheel hotbar switching in-game so accidental scrolls never bump you off your hotkeys.", mx, my);
+            y += cardH + 8;
+        }
+
         if (matchesFilter(filter, "movement nojumpdelay jump delay cooldown headhitter ceiling")) {
             int cardH = 70;
             drawCard(x, y, w, cardH, "NoJumpDelay");
@@ -392,7 +372,7 @@ public class HitJumpConfigScreen extends Screen {
                     "Removes cobweb movement slowdown.", mx, my);
             iy += 22;
             c.noSlowSoulSand = drawToggleRow(x + 10, iy, w - 20, "Soul Sand", c.noSlowSoulSand, false,
-                    "Removes soul sand walking slowdown.", mx, my);
+                    "Restores full walking/sprinting velocity across Soul Sand.", mx, my);
             y += cardH + 8;
         }
         return y;
@@ -426,7 +406,7 @@ public class HitJumpConfigScreen extends Screen {
                     "Draws crisp wireframe hitboxes around entities within your chosen render range.", mx, my);
             iy += 22;
             c.hitboxThroughWalls = drawToggleRow(x + 10, iy, w - 20, "See Through Walls", c.hitboxThroughWalls, false,
-                    "When ON, hitboxes and eye lines show through walls and terrain. Turn OFF for normal line-of-sight only.", mx, my);
+                    "When ON, hitboxes and eye lines show through walls. Turn OFF to hide them behind blocks and terrain.", mx, my);
             iy += 22;
             c.hitboxEyeLineEnabled = drawToggleRow(x + 10, iy, w - 20, "Eye-Level Line (Separate)", c.hitboxEyeLineEnabled, true,
                     "Independent toggle for the red eye-height band; works with or without the outer hitbox.", mx, my);
@@ -455,12 +435,19 @@ public class HitJumpConfigScreen extends Screen {
             y += cardH + 8;
         }
 
-        if (matchesFilter(filter, "visuals block outline highlight thickness width opacity color picker")) {
-            int cardH = 180;
+        if (matchesFilter(filter, "visuals block outline highlight accurate full cube thickness width opacity color picker")) {
+            int cardH = 202;
             drawCard(x, y, w, cardH, "Custom Block Outline");
             int iy = y + 24;
             c.blockOutlineEnabled = drawToggleRow(x + 10, iy, w - 20, "Custom Block Outline", c.blockOutlineEnabled, true,
                     "Draws a customizable colored outline around the block your crosshair is pointing at.", mx, my);
+            iy += 22;
+            if (drawCycleRow(x + 10, iy, w - 20, "Outline Shape Mode",
+                    c.blockOutlineFullBlock ? "Full Block" : "Accurate",
+                    "Accurate hugs exact slabs/stairs/chests/beds; Full Block always draws a full 1x1x1 cube.", mx, my)) {
+                c.blockOutlineFullBlock = !c.blockOutlineFullBlock;
+                HitJumpConfig.save();
+            }
             iy += 22;
             c.blockOutlineWidth = drawSliderRow(403, x + 10, iy, w - 20, "Outline Thickness",
                     c.blockOutlineWidth, 5, 80, String.format("%.1fpx", c.blockOutlineWidth / 10.0F),
@@ -469,6 +456,34 @@ public class HitJumpConfigScreen extends Screen {
             int[] outCol = drawInlineColorPicker(3, x + 10, iy, w - 20, c.blockOutlineColor, c.blockOutlineOpacity, null, mx, my);
             c.blockOutlineColor = outCol[0];
             c.blockOutlineOpacity = outCol[1];
+            y += cardH + 8;
+        }
+
+        if (matchesFilter(filter, "visuals block overlay fill face cube blending normal additive invert opacity color picker")) {
+            int cardH = 202;
+            drawCard(x, y, w, cardH, "Custom Block Overlay");
+            int iy = y + 24;
+            c.blockOverlayEnabled = drawToggleRow(x + 10, iy, w - 20, "Block Overlay Fill", c.blockOverlayEnabled, true,
+                    "Fills the aimed block with a translucent highlight using your chosen color, opacity, and blend mode.", mx, my);
+            iy += 22;
+            if (drawCycleRow(x + 10, iy, w - 20, "Overlay Display",
+                    c.blockOverlayFaceOnly ? "Block Face" : "Full Cube",
+                    "Block Face highlights only the side you aim at; Full Cube renders a see-through highlighted cube.", mx, my)) {
+                c.blockOverlayFaceOnly = !c.blockOverlayFaceOnly;
+                HitJumpConfig.save();
+            }
+            iy += 22;
+            String blendLabel = (c.blockOverlayBlendMode == 1) ? "Additive"
+                    : (c.blockOverlayBlendMode == 2 ? "Invert" : "Normal");
+            if (drawCycleRow(x + 10, iy, w - 20, "Blending Mode", blendLabel,
+                    "Normal = standard translucency; Additive = luminous glow; Invert = high-contrast color flip.", mx, my)) {
+                c.blockOverlayBlendMode = (c.blockOverlayBlendMode + 1) % 3;
+                HitJumpConfig.save();
+            }
+            iy += 24;
+            int[] ovCol = drawInlineColorPicker(5, x + 10, iy, w - 20, c.blockOverlayColor, c.blockOverlayOpacity, null, mx, my);
+            c.blockOverlayColor = ovCol[0];
+            c.blockOverlayOpacity = ovCol[1];
             y += cardH + 8;
         }
 
@@ -523,10 +538,13 @@ public class HitJumpConfigScreen extends Screen {
             y += cardH + 8;
         }
 
-        if (matchesFilter(filter, "visuals center inventory potion shift parallax fix camera")) {
-            int cardH = 70;
-            drawCard(x, y, w, cardH, "Interface & Camera");
+        if (matchesFilter(filter, "visuals night vision fullbright gamma brightness center inventory potion shift parallax fix camera")) {
+            int cardH = 92;
+            drawCard(x, y, w, cardH, "Lighting, Interface & Camera");
             int iy = y + 24;
+            c.nightVisionEnabled = drawToggleRow(x + 10, iy, w - 20, "Night Vision (Fullbright)", c.nightVisionEnabled, true,
+                    "Boosts client brightness to maximum so caves, shadows, and night maps are fully lit with zero potion tint.", mx, my);
+            iy += 22;
             c.centerInventoryEnabled = drawToggleRow(x + 10, iy, w - 20, "Center Inventory (No Potion Shift)", c.centerInventoryEnabled, true,
                     "Keeps your inventory centered instead of pushing it right when potion effects are active.", mx, my);
             iy += 22;
@@ -603,7 +621,7 @@ public class HitJumpConfigScreen extends Screen {
             c.parodyShowHeader = drawToggleRow(x + 10, iy, w - 20, "Show Header Title", c.parodyShowHeader, false,
                     "Displays a bold title line above the list (editable right below).", mx, my);
             iy += 22;
-            drawTextInputRow(2, x + 10, iy, w - 20, "Header Text", c.parodyHeaderText, "Tomato Cream",
+            drawTextInputRow(2, x + 10, iy, w - 20, "Header Text", c.parodyHeaderText, "Skill Issue+",
                     "Click to edit the bold header title shown above your parody list.", mx, my);
             iy += 22;
             c.parodyShowBackground = drawToggleRow(x + 10, iy, w - 20, "Subtle Background Bar", c.parodyShowBackground, false,
@@ -621,7 +639,6 @@ public class HitJumpConfigScreen extends Screen {
             drawCard(x, y, w, cardH, "Parody Lines & Custom Text Editor");
             int iy = y + 24;
 
-            // Add Custom Text input box + "+ Add" button
             int addBtnW = 48;
             int inputW = w - 20 - addBtnW - 6;
             boolean focusNew = (this.focusedInput == 3);
@@ -644,19 +661,15 @@ public class HitJumpConfigScreen extends Screen {
             fillRect(addX, iy, addX + addBtnW, iy + 18,
                     hoverAdd ? 0.22F : 0.16F, hoverAdd ? 0.56F : 0.44F, hoverAdd ? 0.30F : 0.24F, 1.0F);
             this.drawCenteredString(this.textRenderer, "+ Add", addX + addBtnW / 2, iy + 5, 0xFFFFFF);
-            if (this.leftJustClicked && hoverAdd) {
-                commitNewParodyLine(c);
-            }
+            if (this.leftJustClicked && hoverAdd) commitNewParodyLine(c);
             iy += 24;
 
-            // Existing lines list (Toggle + Delete per line)
             int deleteIndex = -1;
             if (c.parodyLines != null) {
                 for (int i = 0; i < c.parodyLines.size(); i++) {
                     HitJumpConfig.ParodyLine line = c.parodyLines.get(i);
                     if (line == null) continue;
-                    int delW = 20;
-                    int togW = 42;
+                    int delW = 20, togW = 42;
                     int delX = x + w - 10 - delW;
                     int togX = delX - 4 - togW;
                     int maxLabelW = togX - (x + 14);
@@ -665,26 +678,18 @@ public class HitJumpConfigScreen extends Screen {
                             line.enabled ? 0xE6EAF2 : 0x7D8492);
 
                     boolean hoverTog = this.mouseInViewport && isInside(mx, my, togX, iy, togW, 18);
-                    if (line.enabled) {
-                        fillRect(togX, iy, togX + togW, iy + 18,
-                                hoverTog ? 0.20F : 0.14F, hoverTog ? 0.56F : 0.45F, hoverTog ? 0.28F : 0.22F, 1.0F);
-                    } else {
-                        fillRect(togX, iy, togX + togW, iy + 18,
-                                hoverTog ? 0.36F : 0.24F, hoverTog ? 0.18F : 0.15F, hoverTog ? 0.18F : 0.16F, 1.0F);
-                    }
+                    fillRect(togX, iy, togX + togW, iy + 18,
+                            line.enabled ? (hoverTog ? 0.20F : 0.14F) : (hoverTog ? 0.36F : 0.24F),
+                            line.enabled ? (hoverTog ? 0.56F : 0.45F) : (hoverTog ? 0.18F : 0.15F),
+                            line.enabled ? (hoverTog ? 0.28F : 0.22F) : (hoverTog ? 0.18F : 0.16F), 1.0F);
                     this.drawCenteredString(this.textRenderer, line.enabled ? "ON" : "OFF", togX + togW / 2, iy + 5, 0xFFFFFF);
-                    if (this.leftJustClicked && hoverTog) {
-                        line.enabled = !line.enabled;
-                        HitJumpConfig.save();
-                    }
+                    if (this.leftJustClicked && hoverTog) { line.enabled = !line.enabled; HitJumpConfig.save(); }
 
                     boolean hoverDel = this.mouseInViewport && isInside(mx, my, delX, iy, delW, 18);
                     fillRect(delX, iy, delX + delW, iy + 18,
                             hoverDel ? 0.58F : 0.28F, hoverDel ? 0.18F : 0.14F, hoverDel ? 0.18F : 0.15F, 1.0F);
                     this.drawCenteredString(this.textRenderer, "X", delX + delW / 2, iy + 5, 0xFFFFFF);
-                    if (this.leftJustClicked && hoverDel) {
-                        deleteIndex = i;
-                    }
+                    if (this.leftJustClicked && hoverDel) deleteIndex = i;
                     iy += 22;
                 }
             }
@@ -693,7 +698,6 @@ public class HitJumpConfigScreen extends Screen {
                 HitJumpConfig.save();
             }
 
-            // Restore Default Presets button
             boolean hoverRestore = this.mouseInViewport && isInside(mx, my, x + 10, iy + 2, 126, 18);
             fillRect(x + 10, iy + 2, x + 136, iy + 20,
                     hoverRestore ? 0.25F : 0.18F, hoverRestore ? 0.28F : 0.20F, hoverRestore ? 0.36F : 0.26F, 1.0F);
@@ -707,7 +711,7 @@ public class HitJumpConfigScreen extends Screen {
         return y;
     }
 
-    private int renderAudioTab(HitJumpConfig c, int x, int y, int w, int mx, int my, String filter) {
+    private int renderAudioTab(final HitJumpConfig c, int x, int y, int w, int mx, int my, String filter) {
         if (matchesFilter(filter, "audio sound mixer master volume pitch mute")) {
             int cardH = 48;
             drawCard(x, y, w, cardH, "Custom Sound Mixer");
@@ -715,73 +719,36 @@ public class HitJumpConfigScreen extends Screen {
                     "Master switch for per-category sound muting, volume scaling, and pitch control.", mx, my);
             y += cardH + 8;
         }
-
         if (matchesFilter(filter, "audio sound hit hurt damage mono pitch volume mute")) {
             y = renderSoundCard(600, "Hit & Hurt Sounds", x, y, w, mx, my,
                     c.soundHitEnabled, c.soundHitMuted, c.soundHitVolume, c.soundHitPitch,
-                    new SoundConsumer() {
-                        @Override
-                        public void apply(boolean en, boolean mu, int vol, int pit) {
-                            c.soundHitEnabled = en; c.soundHitMuted = mu; c.soundHitVolume = vol; c.soundHitPitch = pit;
-                        }
-                    });
+                    new SoundConsumer() { public void apply(boolean e, boolean m, int v, int p) { c.soundHitEnabled = e; c.soundHitMuted = m; c.soundHitVolume = v; c.soundHitPitch = p; } });
         }
-
         if (matchesFilter(filter, "audio sound explosion explosions tnt fireball pitch volume mute")) {
             y = renderSoundCard(610, "Explosions (TNT / Fireballs)", x, y, w, mx, my,
                     c.soundExplosionEnabled, c.soundExplosionMuted, c.soundExplosionVolume, c.soundExplosionPitch,
-                    new SoundConsumer() {
-                        @Override
-                        public void apply(boolean en, boolean mu, int vol, int pit) {
-                            c.soundExplosionEnabled = en; c.soundExplosionMuted = mu; c.soundExplosionVolume = vol; c.soundExplosionPitch = pit;
-                        }
-                    });
+                    new SoundConsumer() { public void apply(boolean e, boolean m, int v, int p) { c.soundExplosionEnabled = e; c.soundExplosionMuted = m; c.soundExplosionVolume = v; c.soundExplosionPitch = p; } });
         }
-
         if (matchesFilter(filter, "audio sound lightning thunder storm pitch volume mute")) {
             y = renderSoundCard(620, "Lightning & Thunder", x, y, w, mx, my,
                     c.soundLightningEnabled, c.soundLightningMuted, c.soundLightningVolume, c.soundLightningPitch,
-                    new SoundConsumer() {
-                        @Override
-                        public void apply(boolean en, boolean mu, int vol, int pit) {
-                            c.soundLightningEnabled = en; c.soundLightningMuted = mu; c.soundLightningVolume = vol; c.soundLightningPitch = pit;
-                        }
-                    });
+                    new SoundConsumer() { public void apply(boolean e, boolean m, int v, int p) { c.soundLightningEnabled = e; c.soundLightningMuted = m; c.soundLightningVolume = v; c.soundLightningPitch = p; } });
         }
-
         if (matchesFilter(filter, "audio sound weather rain pitch volume mute")) {
             y = renderSoundCard(630, "Weather & Rain", x, y, w, mx, my,
                     c.soundRainEnabled, c.soundRainMuted, c.soundRainVolume, c.soundRainPitch,
-                    new SoundConsumer() {
-                        @Override
-                        public void apply(boolean en, boolean mu, int vol, int pit) {
-                            c.soundRainEnabled = en; c.soundRainMuted = mu; c.soundRainVolume = vol; c.soundRainPitch = pit;
-                        }
-                    });
+                    new SoundConsumer() { public void apply(boolean e, boolean m, int v, int p) { c.soundRainEnabled = e; c.soundRainMuted = m; c.soundRainVolume = v; c.soundRainPitch = p; } });
         }
-
         if (matchesFilter(filter, "audio sound nether portal hum pitch volume mute")) {
             y = renderSoundCard(640, "Nether Portals", x, y, w, mx, my,
                     c.soundPortalEnabled, c.soundPortalMuted, c.soundPortalVolume, c.soundPortalPitch,
-                    new SoundConsumer() {
-                        @Override
-                        public void apply(boolean en, boolean mu, int vol, int pit) {
-                            c.soundPortalEnabled = en; c.soundPortalMuted = mu; c.soundPortalVolume = vol; c.soundPortalPitch = pit;
-                        }
-                    });
+                    new SoundConsumer() { public void apply(boolean e, boolean m, int v, int p) { c.soundPortalEnabled = e; c.soundPortalMuted = m; c.soundPortalVolume = v; c.soundPortalPitch = p; } });
         }
-
         if (matchesFilter(filter, "audio sound ghast blaze fireball scream pitch volume mute")) {
             y = renderSoundCard(650, "Ghast & Fireball Screams", x, y, w, mx, my,
                     c.soundGhastEnabled, c.soundGhastMuted, c.soundGhastVolume, c.soundGhastPitch,
-                    new SoundConsumer() {
-                        @Override
-                        public void apply(boolean en, boolean mu, int vol, int pit) {
-                            c.soundGhastEnabled = en; c.soundGhastMuted = mu; c.soundGhastVolume = vol; c.soundGhastPitch = pit;
-                        }
-                    });
+                    new SoundConsumer() { public void apply(boolean e, boolean m, int v, int p) { c.soundGhastEnabled = e; c.soundGhastMuted = m; c.soundGhastVolume = v; c.soundGhastPitch = p; } });
         }
-
         return y;
     }
 
@@ -789,10 +756,8 @@ public class HitJumpConfigScreen extends Screen {
         void apply(boolean enabled, boolean muted, int volume, int pitch);
     }
 
-    private int renderSoundCard(
-            int baseId, String title, int x, int y, int w, int mx, int my,
-            boolean enabled, boolean muted, int volume, int pitch, SoundConsumer out
-    ) {
+    private int renderSoundCard(int baseId, String title, int x, int y, int w, int mx, int my,
+                                boolean enabled, boolean muted, int volume, int pitch, SoundConsumer out) {
         int cardH = 114;
         drawCard(x, y, w, cardH, title);
         int iy = y + 24;
@@ -829,7 +794,7 @@ public class HitJumpConfigScreen extends Screen {
             }
             iy += 22;
             drawBindRow(1, x + 10, iy, w - 20, "Menu Key", c.menuKeyCode,
-                    "Primary key used to open Tomato Cream | Main menu.", mx, my);
+                    "Primary key used to open Skill Issue+ v5.0 | Main menu.", mx, my);
             iy += 22;
             drawBindRow(2, x + 10, iy, w - 20, "Modifier Key (Combo)", c.menuModifierKey,
                     "Key to hold alongside Menu Key when Trigger Mode is set to Modifier + Key.", mx, my);
@@ -856,9 +821,7 @@ public class HitJumpConfigScreen extends Screen {
             fillRect(sx, by, sx + btnW, by + 20,
                     hoverSave ? 0.22F : 0.15F, hoverSave ? 0.48F : 0.36F, hoverSave ? 0.28F : 0.20F, 1.0F);
             this.drawCenteredString(this.textRenderer, "Save Config Now", sx + btnW / 2, by + 6, 0xFFFFFF);
-            if (this.leftJustClicked && hoverSave) {
-                HitJumpConfig.save();
-            }
+            if (this.leftJustClicked && hoverSave) HitJumpConfig.save();
             y += cardH + 8;
         }
         return y;
@@ -874,15 +837,11 @@ public class HitJumpConfigScreen extends Screen {
     }
 
     private void drawInfoBadge(int labelX, int rowY, String label, int controlLeftX, String info, int mx, int my) {
-        if (info == null || info.isEmpty()) {
-            return;
-        }
+        if (info == null || info.isEmpty()) return;
         int ix = labelX + HitJumpMod.getTextWidth(label) + 5;
         int iy = rowY + 3;
         int sz = 11;
-        if (ix + sz >= controlLeftX - 4) {
-            return;
-        }
+        if (ix + sz >= controlLeftX - 4) return;
         boolean hover = this.mouseInViewport && isInside(mx, my, ix - 1, iy - 1, sz + 2, sz + 2);
         fillRect(ix, iy, ix + sz, iy + sz,
                 hover ? 0.34F : 0.20F, hover ? 0.50F : 0.24F, hover ? 0.74F : 0.33F, 1.0F);
@@ -901,13 +860,10 @@ public class HitJumpConfigScreen extends Screen {
         drawInfoBadge(x, y, label, px, info, mx, my);
 
         boolean hover = this.mouseInViewport && isInside(mx, my, px, y, pillW, 18);
-        if (state) {
-            fillRect(px, y, px + pillW, y + 18,
-                    hover ? 0.20F : 0.14F, hover ? 0.56F : 0.45F, hover ? 0.28F : 0.22F, 1.0F);
-        } else {
-            fillRect(px, y, px + pillW, y + 18,
-                    hover ? 0.36F : 0.24F, hover ? 0.18F : 0.15F, hover ? 0.18F : 0.16F, 1.0F);
-        }
+        fillRect(px, y, px + pillW, y + 18,
+                state ? (hover ? 0.20F : 0.14F) : (hover ? 0.36F : 0.24F),
+                state ? (hover ? 0.56F : 0.45F) : (hover ? 0.18F : 0.15F),
+                state ? (hover ? 0.28F : 0.22F) : (hover ? 0.18F : 0.16F), 1.0F);
         String text = useEnableText ? (state ? "Enabled" : "Disabled") : (state ? "ON" : "OFF");
         this.drawCenteredString(this.textRenderer, text, px + pillW / 2, y + 5, 0xFFFFFF);
         if (this.leftJustClicked && hover) {
@@ -946,12 +902,8 @@ public class HitJumpConfigScreen extends Screen {
         this.drawCenteredString(this.textRenderer, text, bx + btnW / 2, y + 5, 0xFFFFFF);
         if (this.leftJustClicked && hover) {
             this.focusedInput = 0;
-            if (waiting) {
-                this.waitingBindTarget = 0;
-            } else {
-                this.waitingBindTarget = bindTarget;
-                snapshotInputs();
-            }
+            if (waiting) this.waitingBindTarget = 0;
+            else { this.waitingBindTarget = bindTarget; snapshotInputs(); }
         }
     }
 
@@ -966,10 +918,7 @@ public class HitJumpConfigScreen extends Screen {
         fillRect(bx - 1, y - 1, bx + boxW + 1, y + 19,
                 focused ? 0.48F : 0.24F, focused ? 0.62F : 0.26F, focused ? 0.85F : 0.32F, 1.0F);
         fillRect(bx, y, bx + boxW, y + 18, 0.06F, 0.07F, 0.09F, 1.0F);
-        if (this.leftJustClicked && hover) {
-            this.focusedInput = focusId;
-            this.waitingBindTarget = 0;
-        }
+        if (this.leftJustClicked && hover) { this.focusedInput = focusId; this.waitingBindTarget = 0; }
         String val = (value != null) ? value : "";
         boolean hasVal = !val.isEmpty();
         String disp = hasVal
@@ -979,18 +928,12 @@ public class HitJumpConfigScreen extends Screen {
     }
 
     private int drawSliderRow(int id, int x, int y, int w, String label, int val, int min, int max, String readout, String info, int mx, int my) {
-        int barW = 148;
-        int bx = x + w - barW;
-        int by = y + 2;
-        int bh = 14;
+        int barW = 148, bx = x + w - barW, by = y + 2, bh = 14;
         drawLeftText(label, x, y + 5, 0xD8DCE4);
         drawInfoBadge(x, y, label, bx, info, mx, my);
 
         boolean hover = this.mouseInViewport && isInside(mx, my, bx, by, barW, bh);
-        if (this.leftJustClicked && hover) {
-            this.activeSliderId = id;
-            this.focusedInput = 0;
-        }
+        if (this.leftJustClicked && hover) { this.activeSliderId = id; this.focusedInput = 0; }
         if (this.leftDown && this.activeSliderId == id) {
             float ratio = clamp01((mx - bx) / (float) barW);
             val = min + Math.round(ratio * (max - min));
@@ -1003,37 +946,22 @@ public class HitJumpConfigScreen extends Screen {
         return clampInt(val, min, max);
     }
 
-    private int[] drawInlineColorPicker(
-            int pickerId, int x, int y, int w,
-            int curRgb, int opacityOrNeg, String previewName, int mx, int my
-    ) {
-        int svW = 156;
-        int svH = 74;
-        int hueX = x + svW + 6;
-        int hueW = 16;
-        int infoX = hueX + hueW + 10;
-        int infoW = Math.max(80, w - (infoX - x));
+    private int[] drawInlineColorPicker(int pickerId, int x, int y, int w, int curRgb, int opacityOrNeg, String previewName, int mx, int my) {
+        int svW = 156, svH = 74, hueX = x + svW + 6, hueW = 16;
+        int infoX = hueX + hueW + 10, infoW = Math.max(80, w - (infoX - x));
         boolean hasAlpha = (opacityOrNeg >= 0);
-        int alphaY = y + svH + 6;
-        int alphaW = svW + 6 + hueW;
-        int alphaH = 14;
+        int alphaY = y + svH + 6, alphaW = svW + 6 + hueW, alphaH = 14;
 
-        int dragSv = pickerId * 10 + 1;
-        int dragHue = pickerId * 10 + 2;
-        int dragAlpha = pickerId * 10 + 3;
+        int dragSv = pickerId * 10 + 1, dragHue = pickerId * 10 + 2, dragAlpha = pickerId * 10 + 3;
 
         if (this.leftJustClicked && this.mouseInViewport) {
-            if (isInside(mx, my, x, y, svW, svH)) {
-                this.activePickerDrag = dragSv;
-                this.focusedInput = 0;
-            } else if (isInside(mx, my, hueX, y, hueW, svH)) {
-                this.activePickerDrag = dragHue;
-                this.focusedInput = 0;
+            if (isInside(mx, my, x, y, svW, svH)) { this.activePickerDrag = dragSv; this.focusedInput = 0; }
+            else if (isInside(mx, my, hueX, y, hueW, svH)) {
+                this.activePickerDrag = dragHue; this.focusedInput = 0;
                 if (pickerHsb[pickerId][2] < 0.08F) pickerHsb[pickerId][2] = 0.85F;
                 if (pickerHsb[pickerId][1] < 0.08F) pickerHsb[pickerId][1] = 0.85F;
             } else if (hasAlpha && isInside(mx, my, x, alphaY, alphaW, alphaH)) {
-                this.activePickerDrag = dragAlpha;
-                this.focusedInput = 0;
+                this.activePickerDrag = dragAlpha; this.focusedInput = 0;
             }
         }
 
@@ -1051,22 +979,16 @@ public class HitJumpConfigScreen extends Screen {
         }
 
         int pureHue = Color.HSBtoRGB(pickerHsb[pickerId][0], 1.0F, 1.0F);
-        float hr = ((pureHue >> 16) & 0xFF) / 255.0F;
-        float hg = ((pureHue >> 8) & 0xFF) / 255.0F;
-        float hb = (pureHue & 0xFF) / 255.0F;
-
-        float cr = ((curRgb >> 16) & 0xFF) / 255.0F;
-        float cg = ((curRgb >> 8) & 0xFF) / 255.0F;
-        float cb = (curRgb & 0xFF) / 255.0F;
+        float hr = ((pureHue >> 16) & 0xFF) / 255.0F, hg = ((pureHue >> 8) & 0xFF) / 255.0F, hb = (pureHue & 0xFF) / 255.0F;
+        float cr = ((curRgb >> 16) & 0xFF) / 255.0F, cg = ((curRgb >> 8) & 0xFF) / 255.0F, cb = (curRgb & 0xFF) / 255.0F;
         float ca = hasAlpha ? (opacityOrNeg / 100.0F) : 1.0F;
 
-        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_CURRENT_BIT | GL11.GL_LIGHTING_BIT);
         GL11.glDisable(GL11.GL_TEXTURE_2D);
         GL11.glEnable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
         GL11.glShadeModel(GL11.GL_SMOOTH);
 
-        // SV Box
         drawQuad(x - 1, y - 1, x + svW + 1, y + svH + 1, 0.5F, 0.5F, 0.55F, 1.0F);
         GL11.glBegin(GL11.GL_QUADS);
         GL11.glColor4f(1, 1, 1, 1); GL11.glVertex2f(x, y);
@@ -1081,18 +1003,15 @@ public class HitJumpConfigScreen extends Screen {
         GL11.glColor4f(0, 0, 0, 0); GL11.glVertex2f(x + svW, y);
         GL11.glEnd();
 
-        float cx = x + pickerHsb[pickerId][1] * svW;
-        float cy = y + (1.0F - pickerHsb[pickerId][2]) * svH;
+        float cx = x + pickerHsb[pickerId][1] * svW, cy = y + (1.0F - pickerHsb[pickerId][2]) * svH;
         drawQuad(cx - 3, cy - 3, cx + 3, cy + 3, 0, 0, 0, 1);
         drawQuad(cx - 2, cy - 2, cx + 2, cy + 2, 1, 1, 1, 1);
 
-        // Hue Bar
         drawQuad(hueX - 1, y - 1, hueX + hueW + 1, y + svH + 1, 0.5F, 0.5F, 0.55F, 1.0F);
         float[][] stops = {{1, 0, 0}, {1, 1, 0}, {0, 1, 0}, {0, 1, 1}, {0, 0, 1}, {1, 0, 1}, {1, 0, 0}};
         float segH = svH / 6.0F;
         for (int s = 0; s < 6; s++) {
-            float y0 = y + s * segH;
-            float y1 = (s == 5) ? (y + svH) : (y + (s + 1) * segH);
+            float y0 = y + s * segH, y1 = (s == 5) ? (y + svH) : (y + (s + 1) * segH);
             GL11.glBegin(GL11.GL_QUADS);
             GL11.glColor4f(stops[s][0], stops[s][1], stops[s][2], 1); GL11.glVertex2f(hueX, y0);
             GL11.glColor4f(stops[s + 1][0], stops[s + 1][1], stops[s + 1][2], 1); GL11.glVertex2f(hueX, y1);
@@ -1104,7 +1023,6 @@ public class HitJumpConfigScreen extends Screen {
         drawQuad(hueX - 2, hy - 2, hueX + hueW + 2, hy + 2, 1, 1, 1, 1);
         drawQuad(hueX - 1, hy - 1, hueX + hueW + 1, hy + 1, 0, 0, 0, 1);
 
-        // Opacity Bar
         if (hasAlpha) {
             drawQuad(x - 1, alphaY - 1, x + alphaW + 1, alphaY + alphaH + 1, 0.5F, 0.5F, 0.55F, 1.0F);
             drawQuad(x, alphaY, x + alphaW, alphaY + alphaH, 0.25F, 0.25F, 0.28F, 1.0F);
@@ -1118,7 +1036,6 @@ public class HitJumpConfigScreen extends Screen {
             drawQuad(ax - 2, alphaY - 1, ax + 2, alphaY + alphaH + 1, 1, 1, 1, 1);
         }
 
-        // Right-side Swatch / Preview
         drawQuad(infoX, y, infoX + infoW, y + 36, 0.16F, 0.18F, 0.22F, 1.0F);
         if (previewName != null) {
             int tw = HitJumpMod.getTextWidth(previewName);
@@ -1130,17 +1047,13 @@ public class HitJumpConfigScreen extends Screen {
 
         GL11.glPopAttrib();
 
-        if (previewName != null) {
-            this.drawCenteredString(this.textRenderer, previewName, infoX + infoW / 2, y + 14, 0xFFFFFF);
-        }
+        if (previewName != null) this.drawCenteredString(this.textRenderer, previewName, infoX + infoW / 2, y + 14, 0xFFFFFF);
         if (hasAlpha) {
             String alphaLabel = (pickerId == 4 ? "Bg Opacity: " : "Opacity: ") + opacityOrNeg + "%";
             this.drawCenteredString(this.textRenderer, alphaLabel, x + alphaW / 2, alphaY + 3, 0xFFFFFF);
         }
         drawLeftText(String.format("Hex: #%06X", curRgb), infoX, y + 44, 0xD0D4DC);
-        if (hasAlpha) {
-            drawLeftText((pickerId == 4 ? "Bg: " : "Alpha: ") + opacityOrNeg + "%", infoX, y + 58, 0xA8B0BC);
-        }
+        if (hasAlpha) drawLeftText((pickerId == 4 ? "Bg: " : "Alpha: ") + opacityOrNeg + "%", infoX, y + 58, 0xA8B0BC);
         return new int[]{curRgb, opacityOrNeg};
     }
 
@@ -1151,10 +1064,8 @@ public class HitJumpConfigScreen extends Screen {
             int lw = HitJumpMod.getTextWidth(lines.get(i));
             if (lw > maxW) maxW = lw;
         }
-        int boxW = maxW + 12;
-        int boxH = (lines.size() * 10) + 10;
-        int tx = rawX;
-        int ty = rawY;
+        int boxW = maxW + 12, boxH = (lines.size() * 10) + 10;
+        int tx = rawX, ty = rawY;
         if (tx + boxW > this.width - 4) tx = this.width - boxW - 4;
         if (ty + boxH > this.height - 4) ty = rawY - boxH - 12;
         if (tx < 4) tx = 4;
@@ -1162,9 +1073,7 @@ public class HitJumpConfigScreen extends Screen {
 
         fillRect(tx - 1, ty - 1, tx + boxW + 1, ty + boxH + 1, 0.42F, 0.54F, 0.78F, 0.95F);
         fillRect(tx, ty, tx + boxW, ty + boxH, 0.06F, 0.07F, 0.10F, 0.97F);
-        for (int i = 0; i < lines.size(); i++) {
-            drawLeftText(lines.get(i), tx + 6, ty + 5 + (i * 10), 0xEEF2F8);
-        }
+        for (int i = 0; i < lines.size(); i++) drawLeftText(lines.get(i), tx + 6, ty + 5 + (i * 10), 0xEEF2F8);
     }
 
     private List<String> wrapText(String text, int maxWidth) {
@@ -1174,33 +1083,24 @@ public class HitJumpConfigScreen extends Screen {
         for (int i = 0; i < words.length; i++) {
             String candidate = (line.length() == 0) ? words[i] : (line.toString() + " " + words[i]);
             if (HitJumpMod.getTextWidth(candidate) <= maxWidth || line.length() == 0) {
-                line.setLength(0);
-                line.append(candidate);
+                line.setLength(0); line.append(candidate);
             } else {
-                out.add(line.toString());
-                line.setLength(0);
-                line.append(words[i]);
+                out.add(line.toString()); line.setLength(0); line.append(words[i]);
             }
         }
-        if (line.length() > 0) {
-            out.add(line.toString());
-        }
+        if (line.length() > 0) out.add(line.toString());
         return out;
     }
 
     private void renderScrollbar(int x, int y, int w, int h, int contentH, int mx, int my) {
         fillRect(x, y, x + w, y + h, 0.06F, 0.07F, 0.09F, 1.0F);
-        if (this.maxScroll <= 0 || contentH <= 0) {
-            return;
-        }
+        if (this.maxScroll <= 0 || contentH <= 0) return;
         int thumbH = Math.max(24, (int) ((h / (float) contentH) * h));
         int trackRange = Math.max(1, h - thumbH);
         int thumbY = y + (int) ((this.scrollOffset / (float) this.maxScroll) * trackRange);
 
         boolean hover = isInside(mx, my, x - 2, y, w + 4, h);
-        if (this.leftJustClicked && hover) {
-            this.draggingScrollbar = true;
-        }
+        if (this.leftJustClicked && hover) this.draggingScrollbar = true;
         if (this.leftDown && this.draggingScrollbar) {
             float ratio = clamp01((my - y - thumbH / 2.0F) / (float) trackRange);
             this.scrollOffset = Math.round(ratio * this.maxScroll);
@@ -1215,47 +1115,31 @@ public class HitJumpConfigScreen extends Screen {
     // ---------- Typing & Rebinding ----------
 
     private void handleTextTyping(HitJumpConfig config) {
-        if (this.focusedInput == 0) {
-            snapshotTypingKeys();
-            return;
-        }
+        if (this.focusedInput == 0) { snapshotTypingKeys(); return; }
         boolean shift = isKeySafe(Keyboard.KEY_LSHIFT) || isKeySafe(Keyboard.KEY_RSHIFT);
         long now = System.currentTimeMillis();
 
-        // Backspace with hold-to-repeat
         boolean backDown = isKeySafe(Keyboard.KEY_BACK);
         if (backDown && !this.typingKeyPrev[Keyboard.KEY_BACK]) {
-            deleteLastChar(config);
-            this.backspaceDownMs = now;
-            this.lastBackspaceRepeatMs = now;
+            deleteLastChar(config); this.backspaceDownMs = now; this.lastBackspaceRepeatMs = now;
         } else if (backDown && (now - this.backspaceDownMs) > 360L && (now - this.lastBackspaceRepeatMs) > 55L) {
-            deleteLastChar(config);
-            this.lastBackspaceRepeatMs = now;
+            deleteLastChar(config); this.lastBackspaceRepeatMs = now;
         }
         this.typingKeyPrev[Keyboard.KEY_BACK] = backDown;
 
-        // Enter key commits new line or unfocuses
         boolean enterDown = isKeySafe(Keyboard.KEY_RETURN) || isKeySafe(Keyboard.KEY_NUMPADENTER);
         if (enterDown && !this.typingKeyPrev[Keyboard.KEY_RETURN]) {
-            if (this.focusedInput == 3) {
-                commitNewParodyLine(config);
-            } else {
-                this.focusedInput = 0;
-                HitJumpConfig.save();
-            }
+            if (this.focusedInput == 3) commitNewParodyLine(config);
+            else { this.focusedInput = 0; HitJumpConfig.save(); }
         }
         this.typingKeyPrev[Keyboard.KEY_RETURN] = enterDown;
 
         for (int key = 1; key < 256; key++) {
-            if (key == Keyboard.KEY_BACK || key == Keyboard.KEY_RETURN || key == Keyboard.KEY_NUMPADENTER) {
-                continue;
-            }
+            if (key == Keyboard.KEY_BACK || key == Keyboard.KEY_RETURN || key == Keyboard.KEY_NUMPADENTER) continue;
             boolean down = isKeySafe(key);
             if (down && !this.typingKeyPrev[key]) {
                 char ch = mapKeyToChar(key, shift);
-                if (ch != 0) {
-                    appendChar(config, ch);
-                }
+                if (ch != 0) appendChar(config, ch);
             }
             this.typingKeyPrev[key] = down;
         }
@@ -1263,49 +1147,31 @@ public class HitJumpConfigScreen extends Screen {
 
     private void appendChar(HitJumpConfig c, char ch) {
         if (this.focusedInput == 1) {
-            if (this.searchQuery.length() < 32) {
-                this.searchQuery += ch;
-                this.scrollOffset = 0;
-            }
+            if (this.searchQuery.length() < 32) { this.searchQuery += ch; this.scrollOffset = 0; }
         } else if (this.focusedInput == 2) {
             if (c.parodyHeaderText == null) c.parodyHeaderText = "";
-            if (c.parodyHeaderText.length() < 28) {
-                c.parodyHeaderText += ch;
-                HitJumpConfig.save();
-            }
+            if (c.parodyHeaderText.length() < 28) { c.parodyHeaderText += ch; HitJumpConfig.save(); }
         } else if (this.focusedInput == 3) {
-            if (this.newParodyLineDraft.length() < 36) {
-                this.newParodyLineDraft += ch;
-            }
+            if (this.newParodyLineDraft.length() < 36) this.newParodyLineDraft += ch;
         }
     }
 
     private void deleteLastChar(HitJumpConfig c) {
-        if (this.focusedInput == 1) {
-            if (!this.searchQuery.isEmpty()) {
-                this.searchQuery = this.searchQuery.substring(0, this.searchQuery.length() - 1);
-                this.scrollOffset = 0;
-            }
-        } else if (this.focusedInput == 2) {
-            if (c.parodyHeaderText != null && !c.parodyHeaderText.isEmpty()) {
-                c.parodyHeaderText = c.parodyHeaderText.substring(0, c.parodyHeaderText.length() - 1);
-                HitJumpConfig.save();
-            }
-        } else if (this.focusedInput == 3) {
-            if (!this.newParodyLineDraft.isEmpty()) {
-                this.newParodyLineDraft = this.newParodyLineDraft.substring(0, this.newParodyLineDraft.length() - 1);
-            }
+        if (this.focusedInput == 1 && !this.searchQuery.isEmpty()) {
+            this.searchQuery = this.searchQuery.substring(0, this.searchQuery.length() - 1);
+            this.scrollOffset = 0;
+        } else if (this.focusedInput == 2 && c.parodyHeaderText != null && !c.parodyHeaderText.isEmpty()) {
+            c.parodyHeaderText = c.parodyHeaderText.substring(0, c.parodyHeaderText.length() - 1);
+            HitJumpConfig.save();
+        } else if (this.focusedInput == 3 && !this.newParodyLineDraft.isEmpty()) {
+            this.newParodyLineDraft = this.newParodyLineDraft.substring(0, this.newParodyLineDraft.length() - 1);
         }
     }
 
     private void commitNewParodyLine(HitJumpConfig c) {
         String trimmed = this.newParodyLineDraft.trim();
-        if (trimmed.isEmpty()) {
-            return;
-        }
-        if (c.parodyLines == null) {
-            c.parodyLines = new ArrayList<HitJumpConfig.ParodyLine>();
-        }
+        if (trimmed.isEmpty()) return;
+        if (c.parodyLines == null) c.parodyLines = new ArrayList<HitJumpConfig.ParodyLine>();
         c.parodyLines.add(new HitJumpConfig.ParodyLine(trimmed, true));
         this.newParodyLineDraft = "";
         HitJumpConfig.save();
@@ -1314,100 +1180,61 @@ public class HitJumpConfigScreen extends Screen {
     private char mapKeyToChar(int key, boolean shift) {
         switch (key) {
             case Keyboard.KEY_SPACE: return ' ';
-            case Keyboard.KEY_A: return shift ? 'A' : 'a';
-            case Keyboard.KEY_B: return shift ? 'B' : 'b';
-            case Keyboard.KEY_C: return shift ? 'C' : 'c';
-            case Keyboard.KEY_D: return shift ? 'D' : 'd';
-            case Keyboard.KEY_E: return shift ? 'E' : 'e';
-            case Keyboard.KEY_F: return shift ? 'F' : 'f';
-            case Keyboard.KEY_G: return shift ? 'G' : 'g';
-            case Keyboard.KEY_H: return shift ? 'H' : 'h';
-            case Keyboard.KEY_I: return shift ? 'I' : 'i';
-            case Keyboard.KEY_J: return shift ? 'J' : 'j';
-            case Keyboard.KEY_K: return shift ? 'K' : 'k';
-            case Keyboard.KEY_L: return shift ? 'L' : 'l';
-            case Keyboard.KEY_M: return shift ? 'M' : 'm';
-            case Keyboard.KEY_N: return shift ? 'N' : 'n';
-            case Keyboard.KEY_O: return shift ? 'O' : 'o';
-            case Keyboard.KEY_P: return shift ? 'P' : 'p';
-            case Keyboard.KEY_Q: return shift ? 'Q' : 'q';
-            case Keyboard.KEY_R: return shift ? 'R' : 'r';
-            case Keyboard.KEY_S: return shift ? 'S' : 's';
-            case Keyboard.KEY_T: return shift ? 'T' : 't';
-            case Keyboard.KEY_U: return shift ? 'U' : 'u';
-            case Keyboard.KEY_V: return shift ? 'V' : 'v';
-            case Keyboard.KEY_W: return shift ? 'W' : 'w';
-            case Keyboard.KEY_X: return shift ? 'X' : 'x';
-            case Keyboard.KEY_Y: return shift ? 'Y' : 'y';
-            case Keyboard.KEY_Z: return shift ? 'Z' : 'z';
-            case Keyboard.KEY_0: return shift ? ')' : '0';
-            case Keyboard.KEY_1: return shift ? '!' : '1';
-            case Keyboard.KEY_2: return shift ? '@' : '2';
-            case Keyboard.KEY_3: return shift ? '#' : '3';
-            case Keyboard.KEY_4: return shift ? '$' : '4';
-            case Keyboard.KEY_5: return shift ? '%' : '5';
-            case Keyboard.KEY_6: return shift ? '^' : '6';
-            case Keyboard.KEY_7: return shift ? '&' : '7';
-            case Keyboard.KEY_8: return shift ? '*' : '8';
-            case Keyboard.KEY_9: return shift ? '(' : '9';
-            case Keyboard.KEY_MINUS: return shift ? '_' : '-';
-            case Keyboard.KEY_EQUALS: return shift ? '+' : '=';
-            case Keyboard.KEY_LBRACKET: return shift ? '{' : '[';
-            case Keyboard.KEY_RBRACKET: return shift ? '}' : ']';
-            case Keyboard.KEY_SEMICOLON: return shift ? ':' : ';';
-            case Keyboard.KEY_APOSTROPHE: return shift ? '"' : '\'';
-            case Keyboard.KEY_COMMA: return shift ? '<' : ',';
-            case Keyboard.KEY_PERIOD: return shift ? '>' : '.';
-            case Keyboard.KEY_SLASH: return shift ? '?' : '/';
-            case Keyboard.KEY_BACKSLASH: return shift ? '|' : '\\';
+            case Keyboard.KEY_A: return shift ? 'A' : 'a'; case Keyboard.KEY_B: return shift ? 'B' : 'b';
+            case Keyboard.KEY_C: return shift ? 'C' : 'c'; case Keyboard.KEY_D: return shift ? 'D' : 'd';
+            case Keyboard.KEY_E: return shift ? 'E' : 'e'; case Keyboard.KEY_F: return shift ? 'F' : 'f';
+            case Keyboard.KEY_G: return shift ? 'G' : 'g'; case Keyboard.KEY_H: return shift ? 'H' : 'h';
+            case Keyboard.KEY_I: return shift ? 'I' : 'i'; case Keyboard.KEY_J: return shift ? 'J' : 'j';
+            case Keyboard.KEY_K: return shift ? 'K' : 'k'; case Keyboard.KEY_L: return shift ? 'L' : 'l';
+            case Keyboard.KEY_M: return shift ? 'M' : 'm'; case Keyboard.KEY_N: return shift ? 'N' : 'n';
+            case Keyboard.KEY_O: return shift ? 'O' : 'o'; case Keyboard.KEY_P: return shift ? 'P' : 'p';
+            case Keyboard.KEY_Q: return shift ? 'Q' : 'q'; case Keyboard.KEY_R: return shift ? 'R' : 'r';
+            case Keyboard.KEY_S: return shift ? 'S' : 's'; case Keyboard.KEY_T: return shift ? 'T' : 't';
+            case Keyboard.KEY_U: return shift ? 'U' : 'u'; case Keyboard.KEY_V: return shift ? 'V' : 'v';
+            case Keyboard.KEY_W: return shift ? 'W' : 'w'; case Keyboard.KEY_X: return shift ? 'X' : 'x';
+            case Keyboard.KEY_Y: return shift ? 'Y' : 'y'; case Keyboard.KEY_Z: return shift ? 'Z' : 'z';
+            case Keyboard.KEY_0: return shift ? ')' : '0'; case Keyboard.KEY_1: return shift ? '!' : '1';
+            case Keyboard.KEY_2: return shift ? '@' : '2'; case Keyboard.KEY_3: return shift ? '#' : '3';
+            case Keyboard.KEY_4: return shift ? '$' : '4'; case Keyboard.KEY_5: return shift ? '%' : '5';
+            case Keyboard.KEY_6: return shift ? '^' : '6'; case Keyboard.KEY_7: return shift ? '&' : '7';
+            case Keyboard.KEY_8: return shift ? '*' : '8'; case Keyboard.KEY_9: return shift ? '(' : '9';
+            case Keyboard.KEY_MINUS: return shift ? '_' : '-'; case Keyboard.KEY_EQUALS: return shift ? '+' : '=';
+            case Keyboard.KEY_LBRACKET: return shift ? '{' : '['; case Keyboard.KEY_RBRACKET: return shift ? '}' : ']';
+            case Keyboard.KEY_SEMICOLON: return shift ? ':' : ';'; case Keyboard.KEY_APOSTROPHE: return shift ? '"' : '\'';
+            case Keyboard.KEY_COMMA: return shift ? '<' : ','; case Keyboard.KEY_PERIOD: return shift ? '>' : '.';
+            case Keyboard.KEY_SLASH: return shift ? '?' : '/'; case Keyboard.KEY_BACKSLASH: return shift ? '|' : '\\';
             default: return 0;
         }
     }
 
     private void snapshotTypingKeys() {
-        for (int k = 1; k < 256; k++) {
-            this.typingKeyPrev[k] = isKeySafe(k);
-        }
+        for (int k = 1; k < 256; k++) this.typingKeyPrev[k] = isKeySafe(k);
     }
 
     private void handleKeyRebinding(HitJumpConfig config) {
-        if (this.waitingBindTarget == 0) {
-            return;
-        }
+        if (this.waitingBindTarget == 0) return;
         boolean allowMouse = (this.waitingBindTarget == 3 || this.waitingBindTarget == 4);
 
         for (int key = 1; key < 256; key++) {
             boolean down = isKeySafe(key);
             if (down && !this.keysHeldAtClick[key]) {
-                if (key != Keyboard.KEY_ESCAPE) {
-                    applyBoundCode(config, key);
-                }
+                if (key != Keyboard.KEY_ESCAPE) applyBoundCode(config, key);
                 this.waitingBindTarget = 0;
                 return;
-            } else if (!down) {
-                this.keysHeldAtClick[key] = false;
-            }
+            } else if (!down) this.keysHeldAtClick[key] = false;
         }
 
         if (allowMouse) {
             int btnCount = 0;
-            try {
-                btnCount = Math.min(Mouse.getButtonCount(), this.mouseHeldAtClick.length);
-            } catch (Throwable ignored) {
-            }
+            try { btnCount = Math.min(Mouse.getButtonCount(), this.mouseHeldAtClick.length); } catch (Throwable ignored) {}
             for (int b = 1; b < btnCount; b++) {
                 boolean down = false;
-                try {
-                    down = Mouse.isButtonDown(b);
-                } catch (Throwable ignored) {
-                }
+                try { down = Mouse.isButtonDown(b); } catch (Throwable ignored) {}
                 if (down && !this.mouseHeldAtClick[b]) {
                     applyBoundCode(config, -100 + b);
                     this.waitingBindTarget = 0;
                     return;
-                } else if (!down) {
-                    this.mouseHeldAtClick[b] = false;
-                }
+                } else if (!down) this.mouseHeldAtClick[b] = false;
             }
         }
     }
@@ -1421,36 +1248,21 @@ public class HitJumpConfigScreen extends Screen {
     }
 
     private void snapshotInputs() {
-        for (int k = 1; k < 256; k++) {
-            this.keysHeldAtClick[k] = isKeySafe(k);
-        }
+        for (int k = 1; k < 256; k++) this.keysHeldAtClick[k] = isKeySafe(k);
         int btnCount = 0;
-        try {
-            btnCount = Math.min(Mouse.getButtonCount(), this.mouseHeldAtClick.length);
-        } catch (Throwable ignored) {
-        }
+        try { btnCount = Math.min(Mouse.getButtonCount(), this.mouseHeldAtClick.length); } catch (Throwable ignored) {}
         for (int b = 0; b < this.mouseHeldAtClick.length; b++) {
             if (b < btnCount) {
-                try {
-                    this.mouseHeldAtClick[b] = Mouse.isButtonDown(b);
-                } catch (Throwable ignored) {
-                    this.mouseHeldAtClick[b] = false;
-                }
-            } else {
-                this.mouseHeldAtClick[b] = false;
-            }
+                try { this.mouseHeldAtClick[b] = Mouse.isButtonDown(b); } catch (Throwable ignored) { this.mouseHeldAtClick[b] = false; }
+            } else this.mouseHeldAtClick[b] = false;
         }
     }
 
     private boolean matchesFilter(String filter, String keywords) {
-        if (filter == null || filter.isEmpty()) {
-            return true;
-        }
+        if (filter == null || filter.isEmpty()) return true;
         String[] parts = filter.split("\\s+");
         for (int i = 0; i < parts.length; i++) {
-            if (!parts[i].isEmpty() && !keywords.contains(parts[i])) {
-                return false;
-            }
+            if (!parts[i].isEmpty() && !keywords.contains(parts[i])) return false;
         }
         return true;
     }
@@ -1459,9 +1271,7 @@ public class HitJumpConfigScreen extends Screen {
         if (text == null) return "";
         if (HitJumpMod.getTextWidth(text) <= maxWidth) return text;
         String s = text;
-        while (s.length() > 1 && HitJumpMod.getTextWidth(s + "..") > maxWidth) {
-            s = s.substring(0, s.length() - 1);
-        }
+        while (s.length() > 1 && HitJumpMod.getTextWidth(s + "..") > maxWidth) s = s.substring(0, s.length() - 1);
         return s + "..";
     }
 
@@ -1486,7 +1296,7 @@ public class HitJumpConfigScreen extends Screen {
     }
 
     private void fillRect(float x0, float y0, float x1, float y1, float r, float g, float b, float a) {
-        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_CURRENT_BIT);
         GL11.glDisable(GL11.GL_TEXTURE_2D);
         GL11.glEnable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
@@ -1497,10 +1307,8 @@ public class HitJumpConfigScreen extends Screen {
     private void drawQuad(float x0, float y0, float x1, float y1, float r, float g, float b, float a) {
         GL11.glColor4f(r, g, b, a);
         GL11.glBegin(GL11.GL_QUADS);
-        GL11.glVertex2f(x0, y0);
-        GL11.glVertex2f(x0, y1);
-        GL11.glVertex2f(x1, y1);
-        GL11.glVertex2f(x1, y0);
+        GL11.glVertex2f(x0, y0); GL11.glVertex2f(x0, y1);
+        GL11.glVertex2f(x1, y1); GL11.glVertex2f(x1, y0);
         GL11.glEnd();
     }
 
@@ -1509,11 +1317,7 @@ public class HitJumpConfigScreen extends Screen {
     }
 
     private boolean isKeySafe(int key) {
-        try {
-            return Keyboard.isKeyDown(key);
-        } catch (Throwable ignored) {
-            return false;
-        }
+        try { return Keyboard.isKeyDown(key); } catch (Throwable ignored) { return false; }
     }
 
     private float clamp01(float v) {
