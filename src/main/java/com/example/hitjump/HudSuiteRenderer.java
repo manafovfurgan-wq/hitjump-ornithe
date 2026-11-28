@@ -26,11 +26,14 @@ public class HudSuiteRenderer {
     public static final int W_SCOREBOARD = 6;
     public static final int W_CHAT = 7;
     public static final int W_TAB = 8;
-    public static final int WIDGET_COUNT = 9;
+    public static final int W_KEYSTROKES_MOUSE = 9;
+    public static final int W_KEYSTROKES_SPACE = 10;
+    public static final int WIDGET_COUNT = 11;
 
     public static final String[] WIDGET_NAMES = {
             "Parody List", "FPS", "CPS", "Keystrokes", "Paper Doll",
-            "Bedwars Tips", "Scoreboard", "Chat Box", "Tab List"
+            "Bedwars Tips", "Scoreboard", "Chat Box", "Tab List",
+            "Keystrokes (Mouse)", "Keystrokes (Space)"
     };
 
     // Last rendered screen-space bounds {x, y, w, h} for HudEditorScreen hit-testing
@@ -167,12 +170,11 @@ public class HudSuiteRenderer {
         GL11.glEnable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
-        // Track Parody HUD approximate bounding box for HudEditorScreen
         computeParodyBounds(c, sw, sh);
 
         if (c.fpsHudEnabled || editorMode) renderFps(c);
         if (c.cpsHudEnabled || editorMode) renderCps(c);
-        if (c.keystrokesEnabled || editorMode) renderKeystrokes(c);
+        if (c.keystrokesEnabled || editorMode) renderKeystrokes(c, editorMode);
         if (c.bedwarsTipsEnabled || editorMode) renderBedwarsTips(c, editorMode);
         if (c.scoreboardHudEnabled || editorMode) renderScoreboard(client, c, sw, editorMode);
         if (c.chatHudEnabled || editorMode) renderChatBox(c, sh, editorMode);
@@ -214,14 +216,13 @@ public class HudSuiteRenderer {
         GL11.glPopMatrix();
     }
 
-    private static void renderKeystrokes(HitJumpConfig c) {
+    private static void renderKeystrokes(HitJumpConfig c, boolean editorMode) {
         float scale = clampScale(c.keystrokesScale);
         int box = 20, gap = 2;
         int totalW = box * 3 + gap * 2;
+        int wasdH = box * 2 + gap;
         int mouseH = 18;
-        int spaceH = c.keystrokesShowSpace ? 13 : 0;
-        int totalH = box * 2 + gap * 2 + mouseH + (c.keystrokesShowSpace ? (gap + spaceH) : 0);
-        setBounds(W_KEYSTROKES, c.keystrokesX, c.keystrokesY, Math.round(totalW * scale), Math.round(totalH * scale));
+        int spaceH = 13;
 
         boolean wDown = isKeySafe(Keyboard.KEY_W);
         boolean aDown = isKeySafe(Keyboard.KEY_A);
@@ -233,26 +234,93 @@ public class HudSuiteRenderer {
 
         float bgA = c.keystrokesBgOpacity / 100.0F;
         int textRgb = resolveColor(c.keystrokesColor, c.keystrokesChroma, 0);
+        int mouseW = (totalW - gap) / 2;
+        String lSub = c.keystrokesShowCps ? (leftClickTimes.size() + " CPS") : null;
+        String rSub = c.keystrokesShowCps ? (rightClickTimes.size() + " CPS") : null;
+
+        if (c.keystrokesSplitPieces) {
+            // Piece 1: WASD
+            if (c.keystrokesShowWasd || editorMode) {
+                setBounds(W_KEYSTROKES, c.keystrokesX, c.keystrokesY, Math.round(totalW * scale), Math.round(wasdH * scale));
+                GL11.glPushMatrix();
+                GL11.glTranslatef(c.keystrokesX, c.keystrokesY, 0.0F);
+                GL11.glScalef(scale, scale, 1.0F);
+                drawKeyBox(box + gap, 0, box, box, "W", null, wDown, c.keystrokesBgColor, bgA, textRgb);
+                drawKeyBox(0, box + gap, box, box, "A", null, aDown, c.keystrokesBgColor, bgA, textRgb);
+                drawKeyBox(box + gap, box + gap, box, box, "S", null, sDown, c.keystrokesBgColor, bgA, textRgb);
+                drawKeyBox((box + gap) * 2, box + gap, box, box, "D", null, dDown, c.keystrokesBgColor, bgA, textRgb);
+                GL11.glPopMatrix();
+            } else {
+                clearBounds(W_KEYSTROKES);
+            }
+
+            // Piece 2: LMB / RMB
+            if (c.keystrokesShowMouse || editorMode) {
+                setBounds(W_KEYSTROKES_MOUSE, c.keystrokesMouseX, c.keystrokesMouseY, Math.round(totalW * scale), Math.round(mouseH * scale));
+                GL11.glPushMatrix();
+                GL11.glTranslatef(c.keystrokesMouseX, c.keystrokesMouseY, 0.0F);
+                GL11.glScalef(scale, scale, 1.0F);
+                drawKeyBox(0, 0, mouseW, mouseH, "LMB", lSub, lDown, c.keystrokesBgColor, bgA, textRgb);
+                drawKeyBox(mouseW + gap, 0, totalW - mouseW - gap, mouseH, "RMB", rSub, rDown, c.keystrokesBgColor, bgA, textRgb);
+                GL11.glPopMatrix();
+            } else {
+                clearBounds(W_KEYSTROKES_MOUSE);
+            }
+
+            // Piece 3: Spacebar
+            if (c.keystrokesShowSpace || editorMode) {
+                setBounds(W_KEYSTROKES_SPACE, c.keystrokesSpaceX, c.keystrokesSpaceY, Math.round(totalW * scale), Math.round(spaceH * scale));
+                GL11.glPushMatrix();
+                GL11.glTranslatef(c.keystrokesSpaceX, c.keystrokesSpaceY, 0.0F);
+                GL11.glScalef(scale, scale, 1.0F);
+                drawKeyBox(0, 0, totalW, spaceH, "-----", null, spDown, c.keystrokesBgColor, bgA, textRgb);
+                GL11.glPopMatrix();
+            } else {
+                clearBounds(W_KEYSTROKES_SPACE);
+            }
+            return;
+        }
+
+        // Unified Mode: stack only the enabled pieces cleanly (supports WASD-only!)
+        clearBounds(W_KEYSTROKES_MOUSE);
+        clearBounds(W_KEYSTROKES_SPACE);
+
+        boolean showWasd = c.keystrokesShowWasd;
+        boolean showMouse = c.keystrokesShowMouse;
+        boolean showSpace = c.keystrokesShowSpace;
+        if (!showWasd && !showMouse && !showSpace) {
+            if (!editorMode) {
+                clearBounds(W_KEYSTROKES);
+                return;
+            }
+            showWasd = true;
+        }
+
+        int totalH = 0;
+        if (showWasd) totalH += wasdH;
+        if (showMouse) totalH += (totalH > 0 ? gap : 0) + mouseH;
+        if (showSpace) totalH += (totalH > 0 ? gap : 0) + spaceH;
+        setBounds(W_KEYSTROKES, c.keystrokesX, c.keystrokesY, Math.round(totalW * scale), Math.round(totalH * scale));
 
         GL11.glPushMatrix();
         GL11.glTranslatef(c.keystrokesX, c.keystrokesY, 0.0F);
         GL11.glScalef(scale, scale, 1.0F);
 
-        drawKeyBox(box + gap, 0, box, box, "W", null, wDown, c.keystrokesBgColor, bgA, textRgb);
-        drawKeyBox(0, box + gap, box, box, "A", null, aDown, c.keystrokesBgColor, bgA, textRgb);
-        drawKeyBox(box + gap, box + gap, box, box, "S", null, sDown, c.keystrokesBgColor, bgA, textRgb);
-        drawKeyBox((box + gap) * 2, box + gap, box, box, "D", null, dDown, c.keystrokesBgColor, bgA, textRgb);
-
-        int my = (box + gap) * 2;
-        int mouseW = (totalW - gap) / 2;
-        String lSub = c.keystrokesShowCps ? (leftClickTimes.size() + " CPS") : null;
-        String rSub = c.keystrokesShowCps ? (rightClickTimes.size() + " CPS") : null;
-        drawKeyBox(0, my, mouseW, mouseH, "LMB", lSub, lDown, c.keystrokesBgColor, bgA, textRgb);
-        drawKeyBox(mouseW + gap, my, totalW - mouseW - gap, mouseH, "RMB", rSub, rDown, c.keystrokesBgColor, bgA, textRgb);
-
-        if (c.keystrokesShowSpace) {
-            int sy = my + mouseH + gap;
-            drawKeyBox(0, sy, totalW, spaceH, "-----", null, spDown, c.keystrokesBgColor, bgA, textRgb);
+        int curY = 0;
+        if (showWasd) {
+            drawKeyBox(box + gap, curY, box, box, "W", null, wDown, c.keystrokesBgColor, bgA, textRgb);
+            drawKeyBox(0, curY + box + gap, box, box, "A", null, aDown, c.keystrokesBgColor, bgA, textRgb);
+            drawKeyBox(box + gap, curY + box + gap, box, box, "S", null, sDown, c.keystrokesBgColor, bgA, textRgb);
+            drawKeyBox((box + gap) * 2, curY + box + gap, box, box, "D", null, dDown, c.keystrokesBgColor, bgA, textRgb);
+            curY += wasdH + gap;
+        }
+        if (showMouse) {
+            drawKeyBox(0, curY, mouseW, mouseH, "LMB", lSub, lDown, c.keystrokesBgColor, bgA, textRgb);
+            drawKeyBox(mouseW + gap, curY, totalW - mouseW - gap, mouseH, "RMB", rSub, rDown, c.keystrokesBgColor, bgA, textRgb);
+            curY += mouseH + gap;
+        }
+        if (showSpace) {
+            drawKeyBox(0, curY, totalW, spaceH, "-----", null, spDown, c.keystrokesBgColor, bgA, textRgb);
         }
 
         GL11.glPopMatrix();
@@ -374,7 +442,6 @@ public class HudSuiteRenderer {
         int y = c.paperDollY;
         setBounds(W_PAPER_DOLL, x, y, boxW, boxH);
 
-        // Bedrock Dynamic visibility: show while moving/sprinting/sneaking/in-air + 2.5s hold
         if (c.paperDollDynamic && !editorMode) {
             HitJumpMod.ensureEntityMotionFields(client.player);
             boolean active = !client.player.onGround || isKeySafe(Keyboard.KEY_LSHIFT);
@@ -423,7 +490,6 @@ public class HudSuiteRenderer {
             GL11.glTranslatef(centerX, baseY, 60.0F);
             GL11.glScalef(-modelScale, modelScale, modelScale);
             GL11.glRotatef(180.0F, 0.0F, 0.0F, 1.0F);
-            // Keep Bedrock 3/4 view angle regardless of compass yaw while preserving animations & cape
             GL11.glRotatef(playerYaw - 155.0F, 0.0F, 1.0F, 0.0F);
 
             renderEntityPosYawMethod.invoke(renderManagerObj, client.player, 0.0D, 0.0D, 0.0D, 0.0F, 1.0F);
@@ -494,6 +560,13 @@ public class HudSuiteRenderer {
         LAST_BOUNDS[id][3] = Math.max(12, h);
     }
 
+    private static void clearBounds(int id) {
+        LAST_BOUNDS[id][0] = 0;
+        LAST_BOUNDS[id][1] = 0;
+        LAST_BOUNDS[id][2] = 0;
+        LAST_BOUNDS[id][3] = 0;
+    }
+
     // ---------- Helpers & Safe Reflection ----------
 
     private static void updateFpsCounter() {
@@ -537,10 +610,7 @@ public class HudSuiteRenderer {
     private static int getWidth(String text) {
         if (text == null || text.isEmpty()) return 0;
         if (textRendererObj != null && textGetWidthMethod != null) {
-            try {
-                return ((Integer) textGetWidthMethod.invoke(textRendererObj, text)).intValue();
-            } catch (Throwable ignored) {
-            }
+            try { return ((Integer) textGetWidthMethod.invoke(textRendererObj, text)).intValue(); } catch (Throwable ignored) {}
         }
         return text.length() * 6;
     }
@@ -589,7 +659,7 @@ public class HudSuiteRenderer {
         try {
             Object sb = worldScoreboardField.get(client.world);
             if (sb == null) return out;
-            Object obj = sbGetObjSlotMethod.invoke(sb, 1); // 1 = Sidebar
+            Object obj = sbGetObjSlotMethod.invoke(sb, 1);
             if (obj == null) return out;
 
             if (objGetDisplayNameMethod != null) {
@@ -646,7 +716,6 @@ public class HudSuiteRenderer {
                         Class<?>[] p = m.getParameterTypes();
                         Class<?> rt = m.getReturnType();
                         if (p.length == 1 && p[0] == int.class && !rt.isPrimitive() && !rt.isArray() && !isSkippableClass(rt) && rt != String.class) {
-                            // Verify another method takes this Objective type and returns Collection
                             for (Method m2 : ft.getMethods()) {
                                 Class<?>[] p2 = m2.getParameterTypes();
                                 if (p2.length == 1 && p2[0] == rt && Collection.class.isAssignableFrom(m2.getReturnType())) {
@@ -662,14 +731,13 @@ public class HudSuiteRenderer {
                         Class<?> objClass = getSlot.getReturnType();
                         for (Method om : objClass.getMethods()) {
                             if (om.getParameterTypes().length == 0 && om.getReturnType() == String.class && !"toString".equals(om.getName())) {
-                                objGetDisplayNameMethod = om; // Prefer display name (last or non-name)
+                                objGetDisplayNameMethod = om;
                             }
                         }
                         for (Method tm : ft.getMethods()) {
                             Class<?>[] tp = tm.getParameterTypes();
                             Class<?> trt = tm.getReturnType();
                             if (tp.length == 1 && tp[0] == String.class && !trt.isPrimitive() && !isSkippableClass(trt) && trt != objClass && trt != String.class) {
-                                // Check if return type has (String)->String formatString
                                 for (Method fm : trt.getMethods()) {
                                     Class<?>[] fp = fm.getParameterTypes();
                                     if (fp.length == 1 && fp[0] == String.class && fm.getReturnType() == String.class) {
