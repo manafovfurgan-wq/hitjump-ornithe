@@ -304,11 +304,12 @@ public class HitboxAnimationRenderer {
     }
 
 	private static void pruneStaleEntries(long now) {
-        Iterator> it = entityLastSeenMs.entrySet().iterator();
+        Iterator it = entityLastSeenMs.keySet().iterator();
         while (it.hasNext()) {
-            Map.Entry<Object, Long> e = it.next();
-            if (now - e.getValue().longValue() > 2000L) {
-                entityFirstSeenMs.remove(e.getKey());
+            Object key = it.next();
+            Long lastVal = entityLastSeenMs.get(key);
+            if (lastVal != null && now - lastVal.longValue() > 2000L) {
+                entityFirstSeenMs.remove(key);
                 it.remove();
             }
         }
