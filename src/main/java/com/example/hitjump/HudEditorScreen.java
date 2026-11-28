@@ -42,7 +42,7 @@ public class HudEditorScreen extends Screen {
         fillRect(this.width / 2.0F, 0, this.width / 2.0F + 1, this.height, 1.0F, 1.0F, 1.0F, 0.12F);
         fillRect(0, this.height / 2.0F, this.width, this.height / 2.0F + 1, 1.0F, 1.0F, 1.0F, 0.12F);
 
-        // Render live previews of Parody HUD + all Wave 2 HUD widgets
+        // Render live previews of Parody HUD + all HUD widgets
         ParodyHudRenderer.renderPreview(this.width, this.height);
         HudSuiteRenderer.renderForEditor(this.width, this.height);
 
@@ -83,10 +83,12 @@ public class HudEditorScreen extends Screen {
             return;
         }
 
-        // Hit-test widgets (top-most first)
+        // Hit-test active widgets (top-most first)
         int hovered = -1;
         for (int i = HudSuiteRenderer.WIDGET_COUNT - 1; i >= 0; i--) {
+            if (!isWidgetPresentInEditor(c, i)) continue;
             int[] b = HudSuiteRenderer.LAST_BOUNDS[i];
+            if (b[2] <= 0 || b[3] <= 0) continue;
             if (isInside(mouseX, mouseY, b[0] - 2, b[1] - 2, b[2] + 4, b[3] + 4)) {
                 hovered = i;
                 break;
@@ -121,7 +123,10 @@ public class HudEditorScreen extends Screen {
 
         // Draw bounding frames & labels
         for (int i = 0; i < HudSuiteRenderer.WIDGET_COUNT; i++) {
+            if (!isWidgetPresentInEditor(c, i)) continue;
             int[] b = HudSuiteRenderer.LAST_BOUNDS[i];
+            if (b[2] <= 0 || b[3] <= 0) continue;
+
             boolean on = isWidgetEnabled(c, i);
             boolean active = (i == this.draggingWidget || i == hovered);
             float r = active ? 0.35F : (on ? 0.25F : 0.70F);
@@ -130,7 +135,8 @@ public class HudEditorScreen extends Screen {
             drawOutline(b[0] - 1, b[1] - 1, b[0] + b[2] + 1, b[1] + b[3] + 1, r, g, bl, active ? 0.95F : 0.55F);
 
             if (active || !on) {
-                String tag = HudSuiteRenderer.WIDGET_NAMES[i] + (on ? "" : " [OFF]");
+                String label = getWidgetLabel(c, i);
+                String tag = label + (on ? "" : " [OFF]");
                 int tw = HitJumpMod.getTextWidth(tag) + 6;
                 int ly = Math.max(2, b[1] - 11);
                 fillRect(b[0], ly, b[0] + tw, ly + 10, 0.05F, 0.06F, 0.08F, 0.85F);
@@ -140,6 +146,20 @@ public class HudEditorScreen extends Screen {
 
         this.wasLeftDown = leftDown;
         this.wasRightDown = rightDown;
+    }
+
+    private boolean isWidgetPresentInEditor(HitJumpConfig c, int id) {
+        if (id == HudSuiteRenderer.W_KEYSTROKES_MOUSE || id == HudSuiteRenderer.W_KEYSTROKES_SPACE) {
+            return c.keystrokesSplitPieces;
+        }
+        return true;
+    }
+
+    private String getWidgetLabel(HitJumpConfig c, int id) {
+        if (id == HudSuiteRenderer.W_KEYSTROKES && c.keystrokesSplitPieces) {
+            return "Keystrokes (WASD)";
+        }
+        return HudSuiteRenderer.WIDGET_NAMES[id];
     }
 
     private void applyWidgetPosition(HitJumpConfig c, int id, int x, int y, int bw, int bh) {
@@ -154,6 +174,8 @@ public class HudEditorScreen extends Screen {
             case HudSuiteRenderer.W_FPS: c.fpsX = x; c.fpsY = y; break;
             case HudSuiteRenderer.W_CPS: c.cpsX = x; c.cpsY = y; break;
             case HudSuiteRenderer.W_KEYSTROKES: c.keystrokesX = x; c.keystrokesY = y; break;
+            case HudSuiteRenderer.W_KEYSTROKES_MOUSE: c.keystrokesMouseX = x; c.keystrokesMouseY = y; break;
+            case HudSuiteRenderer.W_KEYSTROKES_SPACE: c.keystrokesSpaceX = x; c.keystrokesSpaceY = y; break;
             case HudSuiteRenderer.W_PAPER_DOLL: c.paperDollX = x; c.paperDollY = y; break;
             case HudSuiteRenderer.W_BEDWARS: c.bedwarsTipsX = x; c.bedwarsTipsY = y; break;
             case HudSuiteRenderer.W_SCOREBOARD: c.scoreboardX = x; c.scoreboardY = y; break;
@@ -168,7 +190,11 @@ public class HudEditorScreen extends Screen {
             case HudSuiteRenderer.W_PARODY: c.parodyScale = clampInt(c.parodyScale + delta, 50, 200); break;
             case HudSuiteRenderer.W_FPS: c.fpsScale = clampInt(c.fpsScale + delta, 50, 200); break;
             case HudSuiteRenderer.W_CPS: c.cpsScale = clampInt(c.cpsScale + delta, 50, 200); break;
-            case HudSuiteRenderer.W_KEYSTROKES: c.keystrokesScale = clampInt(c.keystrokesScale + delta, 50, 200); break;
+            case HudSuiteRenderer.W_KEYSTROKES:
+            case HudSuiteRenderer.W_KEYSTROKES_MOUSE:
+            case HudSuiteRenderer.W_KEYSTROKES_SPACE:
+                c.keystrokesScale = clampInt(c.keystrokesScale + delta, 50, 200);
+                break;
             case HudSuiteRenderer.W_PAPER_DOLL: c.paperDollScale = clampInt(c.paperDollScale + delta, 50, 200); break;
             case HudSuiteRenderer.W_BEDWARS: c.bedwarsTipsScale = clampInt(c.bedwarsTipsScale + delta, 50, 200); break;
             case HudSuiteRenderer.W_SCOREBOARD: c.scoreboardScale = clampInt(c.scoreboardScale + delta, 50, 200); break;
@@ -183,7 +209,12 @@ public class HudEditorScreen extends Screen {
             case HudSuiteRenderer.W_PARODY: c.parodyHudEnabled = !c.parodyHudEnabled; break;
             case HudSuiteRenderer.W_FPS: c.fpsHudEnabled = !c.fpsHudEnabled; break;
             case HudSuiteRenderer.W_CPS: c.cpsHudEnabled = !c.cpsHudEnabled; break;
-            case HudSuiteRenderer.W_KEYSTROKES: c.keystrokesEnabled = !c.keystrokesEnabled; break;
+            case HudSuiteRenderer.W_KEYSTROKES:
+                if (c.keystrokesSplitPieces) c.keystrokesShowWasd = !c.keystrokesShowWasd;
+                else c.keystrokesEnabled = !c.keystrokesEnabled;
+                break;
+            case HudSuiteRenderer.W_KEYSTROKES_MOUSE: c.keystrokesShowMouse = !c.keystrokesShowMouse; break;
+            case HudSuiteRenderer.W_KEYSTROKES_SPACE: c.keystrokesShowSpace = !c.keystrokesShowSpace; break;
             case HudSuiteRenderer.W_PAPER_DOLL: c.paperDollEnabled = !c.paperDollEnabled; break;
             case HudSuiteRenderer.W_BEDWARS: c.bedwarsTipsEnabled = !c.bedwarsTipsEnabled; break;
             case HudSuiteRenderer.W_SCOREBOARD: c.scoreboardHudEnabled = !c.scoreboardHudEnabled; break;
@@ -198,7 +229,12 @@ public class HudEditorScreen extends Screen {
             case HudSuiteRenderer.W_PARODY: return c.parodyHudEnabled;
             case HudSuiteRenderer.W_FPS: return c.fpsHudEnabled;
             case HudSuiteRenderer.W_CPS: return c.cpsHudEnabled;
-            case HudSuiteRenderer.W_KEYSTROKES: return c.keystrokesEnabled;
+            case HudSuiteRenderer.W_KEYSTROKES:
+                return c.keystrokesEnabled && (!c.keystrokesSplitPieces || c.keystrokesShowWasd);
+            case HudSuiteRenderer.W_KEYSTROKES_MOUSE:
+                return c.keystrokesEnabled && c.keystrokesShowMouse;
+            case HudSuiteRenderer.W_KEYSTROKES_SPACE:
+                return c.keystrokesEnabled && c.keystrokesShowSpace;
             case HudSuiteRenderer.W_PAPER_DOLL: return c.paperDollEnabled;
             case HudSuiteRenderer.W_BEDWARS: return c.bedwarsTipsEnabled;
             case HudSuiteRenderer.W_SCOREBOARD: return c.scoreboardHudEnabled;
@@ -212,7 +248,10 @@ public class HudEditorScreen extends Screen {
         c.parodyCorner = 1; c.parodyOffsetX = 6; c.parodyOffsetY = 6; c.parodyScale = 100;
         c.fpsX = 6; c.fpsY = 126; c.fpsScale = 100;
         c.cpsX = 6; c.cpsY = 144; c.cpsScale = 100;
-        c.keystrokesX = 6; c.keystrokesY = 164; c.keystrokesScale = 100;
+        c.keystrokesX = 6; c.keystrokesY = 164;
+        c.keystrokesMouseX = 6; c.keystrokesMouseY = 208;
+        c.keystrokesSpaceX = 6; c.keystrokesSpaceY = 228;
+        c.keystrokesScale = 100;
         c.paperDollX = 28; c.paperDollY = 58; c.paperDollScale = 100;
         c.bedwarsTipsX = 6; c.bedwarsTipsY = 258; c.bedwarsTipsScale = 90;
         c.scoreboardX = -1; c.scoreboardY = 120; c.scoreboardScale = 100;
