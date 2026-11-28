@@ -9,6 +9,7 @@ import org.lwjgl.opengl.GL11;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -17,9 +18,19 @@ public class HitJumpMod implements ClientModInitializer {
     private static final long DOUBLE_TAP_WINDOW_MS = 380L;
     private static Minecraft cachedClient = null;
 
+    // Render pass guard so 3D visuals run before hand depth-clear
+    private static boolean worldVisualsRenderedThisFrame = false;
+
     // Menu trigger state
     private static boolean wasMenuKeyDown = false;
     private static long lastMenuKeyTapMs = 0L;
+
+    // Keep Moving After GUI & No Hotbar Scroll state
+    private static Screen lastTickScreen = null;
+    private static int hotbarSlotBeforeTick = -1;
+
+    // Night Vision / Fullbright state
+    private static float savedGamma = -1.0F;
 
     // HitJump state
     private static int lastHurtTime = 0;
@@ -41,7 +52,7 @@ public class HitJumpMod implements ClientModInitializer {
     private static float smoothEyeHeight = -1.0F;
     private static long lastCameraTimeNanos = 0L;
 
-    // Cached reflective fields (package-private where shared with WorldVisualsRenderer)
+    // Cached reflective fields
     private static Field hurtTimeField = null;
     private static boolean hurtTimeSearched = false;
 
@@ -58,9 +69,15 @@ public class HitJumpMod implements ClientModInitializer {
     private static Object useKeyBindingObj = null;
     private static Object pickKeyBindingObj = null;
     private static Object sprintKeyBindingObj = null;
+    private static final List<Object> movementKeyBindings = new ArrayList<Object>();
+    private static final List<Object> hotbarKeyBindings = new ArrayList<Object>();
     private static Field keyBindingKeyCodeField = null;
     private static Field keyBindingPressedField = null;
     private static Field keyBindingPressTimeField = null;
+
+    private static boolean playerInventorySearched = false;
+    private static Field playerInventoryField = null;
+    private static Field selectedSlotField = null;
 
     static boolean entityMotionSearched = false;
     static Field entityPrevXField = null;
@@ -111,6 +128,7 @@ public class HitJumpMod implements ClientModInitializer {
     private static boolean perspectiveSearched = false;
     private static Field optionsObjectField = null;
     private static Field thirdPersonViewField = null;
+    private static Field gammaField = null;
 
     @Override
     public void onInitializeClient() {
@@ -133,13 +151,22 @@ public class HitJumpMod implements ClientModInitializer {
 
         HitJumpConfig config = HitJumpConfig.getInstance();
 
-        // Sound Mixer runs every tick even in menus
+        // Sound Mixer runs every tick
         SoundMixer.processActiveSounds(client);
+
+        // Night Vision / Fullbright (gamma override)
+        applyNightVision(client, config);
 
         // Center Inventory (No Potion Shift)
         if (config.centerInventoryEnabled && client.screen != null) {
             centerContainerScreen(client.screen);
         }
+
+        // Keep Moving After GUI Close: re-sync held movement keys the instant a screen closes
+        if (config.keepMovingAfterGuiEnabled && lastTickScreen != null && client.screen == null && client.player != null) {
+            resyncHeldMovementKeys(client);
+        }
+        lastTickScreen = client.screen;
 
         // Anti-Accidental Menu Trigger (Double-Tap, Modifier + Key, or Single Press)
         handleMenuTrigger(client, config);
@@ -152,7 +179,15 @@ public class HitJumpMod implements ClientModInitializer {
             recentCombatHurtWindow = 0;
             wasOnGround = true;
             smoothEyeHeight = -1.0F;
+            hotbarSlotBeforeTick = -1;
             return;
+        }
+
+        // Capture hotbar slot before Mouse.next() processes wheel events
+        if (config.noScrollEnabled && client.screen == null) {
+            hotbarSlotBeforeTick = getSelectedHotbarSlot(client.player);
+        } else {
+            hotbarSlotBeforeTick = -1;
         }
 
         // Toggle Sprint + Dedicated Hotkey
@@ -187,17 +222,17 @@ public class HitJumpMod implements ClientModInitializer {
             releaseForcedUseKey(client.screen != null);
         }
 
-        // NoHitDelay: clamp vanilla's 10-tick miss penalty (never touching GUI-close 10000 lock)
+        // NoHitDelay: clamp vanilla's 10-tick miss penalty
         if (config.noHitDelayEnabled) {
             applyNoHitDelay(client, config.hitDelayTicks);
         }
 
-        // NoJumpDelay: clamp vanilla's 10-tick jump cooldown before movement ticks
+        // NoJumpDelay: clamp vanilla's 10-tick jump cooldown
         if (config.noJumpDelayEnabled) {
             applyNoJumpDelay(client.player, config.jumpDelayTicks);
         }
 
-        // HitJump: only trigger on actual knockback hits (ignores fall, fire, cactus, poison, void)
+        // HitJump: trigger only on actual knockback hits
         if (!config.enabled) {
             lastHurtTime = 0;
             pendingJumpTicks = -1;
@@ -256,6 +291,21 @@ public class HitJumpMod implements ClientModInitializer {
             return;
         }
 
+        // No Hotbar Scroll: revert wheel-driven slot changes while keeping hotbar keys 1-9 working
+        if (config.noScrollEnabled && client.screen == null && hotbarSlotBeforeTick >= 0) {
+            int wheel = 0;
+            try {
+                wheel = Mouse.getDWheel();
+            } catch (Throwable ignored) {
+            }
+            if (wheel != 0 && !isAnyHotbarOrPickKeyDown(client)) {
+                int currentSlot = getSelectedHotbarSlot(client.player);
+                if (currentSlot != hotbarSlotBeforeTick) {
+                    setSelectedHotbarSlot(client.player, hotbarSlotBeforeTick);
+                }
+            }
+        }
+
         if (config.godPlaceEnabled && client.screen == null && isBindDown(config.godPlaceKeyCode)) {
             applyGodPlace(client, config.godPlaceDelayTicks);
             clearPickKeyPressTimeIfShared(client, config.godPlaceKeyCode);
@@ -271,11 +321,123 @@ public class HitJumpMod implements ClientModInitializer {
         }
     }
 
+    private static void applyNightVision(Minecraft client, HitJumpConfig config) {
+        ensureOptionsFields(client);
+        if (optionsObjectField == null || gammaField == null) {
+            return;
+        }
+        try {
+            Object opts = optionsObjectField.get(client);
+            if (opts == null) {
+                return;
+            }
+            if (config.nightVisionEnabled) {
+                float cur = gammaField.getFloat(opts);
+                if (savedGamma < 0.0F) {
+                    savedGamma = (cur > 1.05F) ? 1.0F : Math.max(0.0F, cur);
+                }
+                if (cur < 99.0F) {
+                    gammaField.setFloat(opts, 100.0F);
+                }
+            } else if (savedGamma >= 0.0F) {
+                gammaField.setFloat(opts, savedGamma);
+                savedGamma = -1.0F;
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void resyncHeldMovementKeys(Minecraft client) {
+        ensureKeyBindingFields(client);
+        for (int i = 0; i < movementKeyBindings.size(); i++) {
+            Object kb = movementKeyBindings.get(i);
+            int code = getKeyBindingCode(kb, 0);
+            if (code != 0 && isBindDown(code)) {
+                setKeyBindingPressed(kb, true);
+            }
+        }
+    }
+
+    private static boolean isAnyHotbarOrPickKeyDown(Minecraft client) {
+        ensureKeyBindingFields(client);
+        for (int i = 0; i < hotbarKeyBindings.size(); i++) {
+            int code = getKeyBindingCode(hotbarKeyBindings.get(i), 0);
+            if (code != 0 && isBindDown(code)) {
+                return true;
+            }
+        }
+        int pickCode = getKeyBindingCode(pickKeyBindingObj, -98);
+        return pickCode != 0 && isBindDown(pickCode);
+    }
+
+    private static int getSelectedHotbarSlot(Object player) {
+        ensurePlayerInventoryFields(player);
+        if (playerInventoryField != null && selectedSlotField != null) {
+            try {
+                Object inv = playerInventoryField.get(player);
+                if (inv != null) {
+                    return selectedSlotField.getInt(inv);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return -1;
+    }
+
+    private static void setSelectedHotbarSlot(Object player, int slot) {
+        ensurePlayerInventoryFields(player);
+        if (playerInventoryField != null && selectedSlotField != null && slot >= 0 && slot <= 8) {
+            try {
+                Object inv = playerInventoryField.get(player);
+                if (inv != null) {
+                    selectedSlotField.setInt(inv, slot);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private static void ensurePlayerInventoryFields(Object player) {
+        if (playerInventorySearched || player == null) {
+            return;
+        }
+        playerInventorySearched = true;
+        Class<?> playerBase = getPlayerBaseClass(player);
+        if (playerBase == null) {
+            return;
+        }
+        try {
+            for (Field f : playerBase.getDeclaredFields()) {
+                if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive() || isSkippableClass(f.getType())) {
+                    continue;
+                }
+                Field[] invFields;
+                try {
+                    invFields = f.getType().getDeclaredFields();
+                } catch (Throwable ignored) {
+                    continue;
+                }
+                for (int i = 0; i <= invFields.length - 4; i++) {
+                    if (!Modifier.isStatic(invFields[i].getModifiers()) && invFields[i].getType().isArray()
+                            && !Modifier.isStatic(invFields[i + 1].getModifiers()) && invFields[i + 1].getType().isArray()
+                            && isInstanceField(invFields[i + 2], int.class)
+                            && !Modifier.isStatic(invFields[i + 3].getModifiers()) && invFields[i + 3].getType() == playerBase) {
+                        f.setAccessible(true);
+                        invFields[i + 2].setAccessible(true);
+                        playerInventoryField = f;
+                        selectedSlotField = invFields[i + 2];
+                        return;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     private static void handleMenuTrigger(Minecraft client, HitJumpConfig config) {
         boolean isMenuKeyDown = isKeyDownSafe(config.menuKeyCode);
         if (isMenuKeyDown && !wasMenuKeyDown && client.screen == null && client.player != null) {
             if (config.menuTriggerMode == 0) {
-                // Double-Tap mode
                 long now = System.currentTimeMillis();
                 if (lastMenuKeyTapMs > 0L && (now - lastMenuKeyTapMs) <= DOUBLE_TAP_WINDOW_MS) {
                     lastMenuKeyTapMs = 0L;
@@ -284,12 +446,10 @@ public class HitJumpMod implements ClientModInitializer {
                     lastMenuKeyTapMs = now;
                 }
             } else if (config.menuTriggerMode == 1) {
-                // Modifier + Key mode
                 if (isModifierDown(config.menuModifierKey)) {
                     client.openScreen(new HitJumpConfigScreen(null));
                 }
             } else {
-                // Single Press mode
                 client.openScreen(new HitJumpConfigScreen(null));
             }
         }
@@ -300,9 +460,7 @@ public class HitJumpMod implements ClientModInitializer {
     }
 
     private static boolean isModifierDown(int modifierKey) {
-        if (isKeyDownSafe(modifierKey)) {
-            return true;
-        }
+        if (isKeyDownSafe(modifierKey)) return true;
         if (modifierKey == Keyboard.KEY_LCONTROL) return isKeyDownSafe(Keyboard.KEY_RCONTROL);
         if (modifierKey == Keyboard.KEY_RCONTROL) return isKeyDownSafe(Keyboard.KEY_LCONTROL);
         if (modifierKey == Keyboard.KEY_LSHIFT) return isKeyDownSafe(Keyboard.KEY_RSHIFT);
@@ -339,17 +497,15 @@ public class HitJumpMod implements ClientModInitializer {
         Object player = client.player;
         ensureEntityMotionFields(player);
 
-        // Cobwebs: clear Entity.isInWeb before moveEntity() reads it
         if (config.noSlowCobwebs && entityInWebField != null) {
             try {
                 if (entityInWebField.getBoolean(player)) {
                     entityInWebField.setBoolean(player, false);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
 
-        // Item Use (eating, drinking, bow draw, sword blocking): restore the 80% movement loss
         if (config.noSlowItems && client.screen == null && !isPlayerSneaking(player)) {
             float forward = getInputForward(player);
             float strafe = getInputStrafe(player);
@@ -368,7 +524,6 @@ public class HitJumpMod implements ClientModInitializer {
                         float sin = (float) Math.sin(yawRad);
                         float cos = (float) Math.cos(yawRad);
 
-                        // Add missing ~80% of normal walk/sprint acceleration
                         double boost = client.player.onGround ? 0.072D : 0.020D;
                         double addX = (normS * cos - normF * sin) * boost;
                         double addZ = (normF * cos + normS * sin) * boost;
@@ -385,7 +540,7 @@ public class HitJumpMod implements ClientModInitializer {
                         entityVelXField.setDouble(player, vx);
                         entityVelZField.setDouble(player, vz);
                     }
-                } catch (Exception ignored) {
+                } catch (Throwable ignored) {
                 }
             }
         }
@@ -400,32 +555,57 @@ public class HitJumpMod implements ClientModInitializer {
                 if (entityInWebField.getBoolean(player)) {
                     entityInWebField.setBoolean(player, false);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
 
-        // Soul Sand: vanilla sets Y-height to .875 and multiplies motionX/Z by 0.4 during block collisions
+        // Soul Sand fix: handles 1 to 4 overlapping Soul Sand blocks crushing motionX/Z down to near-zero
         if (config.noSlowSoulSand
                 && client.player.onGround
                 && !isPlayerSneaking(player)
-                && entityYField != null && entityVelXField != null && entityVelZField != null) {
+                && entityYField != null && entityVelXField != null && entityVelZField != null && entityYawField != null) {
             try {
                 boolean hitWall = (entityCollidedHorizField != null) && entityCollidedHorizField.getBoolean(player);
                 if (!hitWall) {
                     double y = entityYField.getDouble(player);
                     double fracY = y - Math.floor(y);
-                    if (Math.abs(fracY - 0.875D) < 0.003D) {
-                        double vx = entityVelXField.getDouble(player);
-                        double vz = entityVelZField.getDouble(player);
-                        double speed = Math.sqrt(vx * vx + vz * vz);
-                        if (speed > 0.015D && speed < 0.14D) {
-                            double factor = Math.min(2.5D, 0.23D / speed);
-                            entityVelXField.setDouble(player, vx * factor);
-                            entityVelZField.setDouble(player, vz * factor);
+                    if (Math.abs(fracY - 0.875D) < 0.006D) {
+                        float forward = getInputForward(player);
+                        float strafe = getInputStrafe(player);
+                        if (Math.abs(forward) > 0.05F || Math.abs(strafe) > 0.05F) {
+                            double vx = entityVelXField.getDouble(player);
+                            double vz = entityVelZField.getDouble(player);
+                            double endSpeed = Math.sqrt(vx * vx + vz * vz);
+                            // Normal ground post-friction speed is ~0.118 (walk) / ~0.153 (sprint);
+                            // Soul Sand crushes endSpeed below 0.08 (down to 0.001 on 4-block corners)
+                            if (endSpeed < 0.085D) {
+                                float normF = (Math.abs(forward) > 0.05F) ? Math.signum(forward) : 0.0F;
+                                float normS = (Math.abs(strafe) > 0.05F) ? Math.signum(strafe) : 0.0F;
+                                float len = (float) Math.sqrt(normF * normF + normS * normS);
+                                if (len > 0.001F) {
+                                    normF /= len;
+                                    normS /= len;
+                                    float yawRad = (float) Math.toRadians(entityYawField.getFloat(player));
+                                    float sin = (float) Math.sin(yawRad);
+                                    float cos = (float) Math.cos(yawRad);
+
+                                    double dirX = normS * cos - normF * sin;
+                                    double dirZ = normF * cos + normS * sin;
+
+                                    ensureKeyBindingFields(client);
+                                    boolean sprintPressed = (config.toggleSprintEnabled && config.toggleSprintActive)
+                                            || isBindDown(getKeyBindingCode(sprintKeyBindingObj, Keyboard.KEY_LCONTROL));
+                                    boolean sprinting = sprintPressed && forward > 0.1F;
+                                    double targetEndSpeed = sprinting ? 0.153D : 0.118D;
+
+                                    entityVelXField.setDouble(player, dirX * targetEndSpeed);
+                                    entityVelZField.setDouble(player, dirZ * targetEndSpeed);
+                                }
+                            }
                         }
                     }
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -435,7 +615,6 @@ public class HitJumpMod implements ClientModInitializer {
             lockEquippedItemProgress(client);
         }
 
-        // 1.7 Blockhit Animation: allow visual sword swing while blocking (holding Right + Left Click)
         if (blockhitSwingCooldown > 0) {
             blockhitSwingCooldown--;
         }
@@ -445,7 +624,7 @@ public class HitJumpMod implements ClientModInitializer {
             try {
                 leftDown = Mouse.isButtonDown(0);
                 rightDown = Mouse.isButtonDown(1);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
             if (leftDown && rightDown && blockhitSwingCooldown == 0) {
                 triggerVisualArmSwing(client.player);
@@ -464,7 +643,7 @@ public class HitJumpMod implements ClientModInitializer {
                     swingProgressIntField.setInt(player, -1);
                     swingInProgressField.setBoolean(player, true);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -479,8 +658,6 @@ public class HitJumpMod implements ClientModInitializer {
             return;
         }
         Field[] fields = livingClass.getDeclaredFields();
-        // Matches vanilla 1.8.9 LivingEntity layout around swing:
-        // boolean isSwingInProgress, int swingProgressInt, int arrowHitTimer, int hurtTime, int maxHurtTime, float attackedAtYaw
         for (int i = 0; i <= fields.length - 6; i++) {
             if (isInstanceField(fields[i], boolean.class)
                     && isInstanceField(fields[i + 1], int.class)
@@ -488,10 +665,13 @@ public class HitJumpMod implements ClientModInitializer {
                     && isInstanceField(fields[i + 3], int.class)
                     && isInstanceField(fields[i + 4], int.class)
                     && isInstanceField(fields[i + 5], float.class)) {
-                swingInProgressField = fields[i];
-                swingProgressIntField = fields[i + 1];
-                swingInProgressField.setAccessible(true);
-                swingProgressIntField.setAccessible(true);
+                try {
+                    swingInProgressField = fields[i];
+                    swingProgressIntField = fields[i + 1];
+                    swingInProgressField.setAccessible(true);
+                    swingProgressIntField.setAccessible(true);
+                } catch (Throwable ignored) {
+                }
                 return;
             }
         }
@@ -503,7 +683,7 @@ public class HitJumpMod implements ClientModInitializer {
             try {
                 equippedProgressField.setFloat(itemInHandRendererObj, 1.0F);
                 prevEquippedProgressField.setFloat(itemInHandRendererObj, 1.0F);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -519,24 +699,23 @@ public class HitJumpMod implements ClientModInitializer {
             try {
                 mcField.setAccessible(true);
                 obj = mcField.get(client);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
                 continue;
             }
-            if (obj == null || obj.getClass().isArray()) continue;
+            if (obj == null || obj.getClass().isArray() || isSkippableClass(obj.getClass())) continue;
             if (tryBindItemInHandRenderer(obj)) {
                 return;
             }
-            // Check inside GameRenderer as well
             for (Field sub : obj.getClass().getDeclaredFields()) {
                 if (Modifier.isStatic(sub.getModifiers()) || sub.getType().isPrimitive()) continue;
                 Object subObj;
                 try {
                     sub.setAccessible(true);
                     subObj = sub.get(obj);
-                } catch (Exception ignored) {
+                } catch (Throwable ignored) {
                     continue;
                 }
-                if (subObj == null || subObj.getClass().isArray()) continue;
+                if (subObj == null || subObj.getClass().isArray() || isSkippableClass(subObj.getClass())) continue;
                 if (tryBindItemInHandRenderer(subObj)) {
                     return;
                 }
@@ -545,12 +724,15 @@ public class HitJumpMod implements ClientModInitializer {
     }
 
     private static boolean tryBindItemInHandRenderer(Object candidate) {
-        Field[] fields = candidate.getClass().getDeclaredFields();
+        Field[] fields;
+        try {
+            fields = candidate.getClass().getDeclaredFields();
+        } catch (Throwable ignored) {
+            return false;
+        }
         if (fields.length < 6 || fields.length > 14) {
             return false;
         }
-        // Matches vanilla 1.8.9 ItemRenderer (ItemInHandRenderer):
-        // Minecraft, ItemStack, float equippedProgress, float prevEquippedProgress, RenderManager, RenderItem, int equippedItemSlot
         for (int i = 0; i <= fields.length - 7; i++) {
             if (isInstanceField(fields[i], Minecraft.class)
                     && !Modifier.isStatic(fields[i + 1].getModifiers()) && !fields[i + 1].getType().isPrimitive()
@@ -559,12 +741,15 @@ public class HitJumpMod implements ClientModInitializer {
                     && !Modifier.isStatic(fields[i + 4].getModifiers()) && !fields[i + 4].getType().isPrimitive()
                     && !Modifier.isStatic(fields[i + 5].getModifiers()) && !fields[i + 5].getType().isPrimitive()
                     && isInstanceField(fields[i + 6], int.class)) {
-                itemInHandRendererObj = candidate;
-                equippedProgressField = fields[i + 2];
-                prevEquippedProgressField = fields[i + 3];
-                equippedProgressField.setAccessible(true);
-                prevEquippedProgressField.setAccessible(true);
-                return true;
+                try {
+                    itemInHandRendererObj = candidate;
+                    equippedProgressField = fields[i + 2];
+                    prevEquippedProgressField = fields[i + 3];
+                    equippedProgressField.setAccessible(true);
+                    prevEquippedProgressField.setAccessible(true);
+                    return true;
+                } catch (Throwable ignored) {
+                }
             }
         }
         return false;
@@ -576,10 +761,13 @@ public class HitJumpMod implements ClientModInitializer {
         }
         if (!guiContainerSearched) {
             Class<?> cls = screen.getClass();
-            while (cls != null && cls != Screen.class && cls != Object.class) {
-                Field[] fields = cls.getDeclaredFields();
-                // Matches vanilla 1.8.9 GuiContainer:
-                // int xSize, int ySize, Container inventorySlots, int guiLeft, int guiTop
+            while (cls != null && cls != Screen.class && cls != Object.class && !isSkippableClass(cls)) {
+                Field[] fields;
+                try {
+                    fields = cls.getDeclaredFields();
+                } catch (Throwable ignored) {
+                    break;
+                }
                 for (int i = 0; i <= fields.length - 5; i++) {
                     if (isInstanceField(fields[i], int.class)
                             && isInstanceField(fields[i + 1], int.class)
@@ -597,7 +785,7 @@ public class HitJumpMod implements ClientModInitializer {
                                 guiContainerSearched = true;
                                 break;
                             }
-                        } catch (Exception ignored) {
+                        } catch (Throwable ignored) {
                         }
                     }
                 }
@@ -615,7 +803,7 @@ public class HitJumpMod implements ClientModInitializer {
                 if (currentLeft == shiftedLeft && currentLeft != centeredLeft) {
                     guiLeftField.setInt(screen, centeredLeft);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -679,13 +867,13 @@ public class HitJumpMod implements ClientModInitializer {
         if (config.noSwapDipEnabled) {
             lockEquippedItemProgress(cachedClient);
         }
-        // Parallax Fix (MC-1846): cancel vanilla 1.8.9's -0.1F backward first-person camera shift
         if (config.parallaxFixEnabled && getPerspective(cachedClient) == 0) {
             GL11.glTranslatef(0.0F, 0.0F, 0.1F);
         }
     }
 
     public static void onTransformCameraTail(float tickDelta) {
+        worldVisualsRenderedThisFrame = false;
         if (cachedClient == null || cachedClient.player == null) {
             return;
         }
@@ -726,11 +914,22 @@ public class HitJumpMod implements ClientModInitializer {
         WorldVisualsRenderer.captureCameraMatrices();
     }
 
+    public static void onRenderWorldBeforeHand(float tickDelta) {
+        if (worldVisualsRenderedThisFrame) {
+            return;
+        }
+        worldVisualsRenderedThisFrame = true;
+        WorldVisualsRenderer.onRenderWorldTail(cachedClient, tickDelta);
+    }
+
     public static void onRenderWorldTail(float tickDelta) {
         if (cachedClient != null && cachedClient.screen != null && HitJumpConfig.getInstance().centerInventoryEnabled) {
             centerContainerScreen(cachedClient.screen);
         }
-        WorldVisualsRenderer.onRenderWorldTail(cachedClient, tickDelta);
+        if (!worldVisualsRenderedThisFrame) {
+            worldVisualsRenderedThisFrame = true;
+            WorldVisualsRenderer.onRenderWorldTail(cachedClient, tickDelta);
+        }
     }
 
     public static boolean isBindDown(int bindCode) {
@@ -743,7 +942,7 @@ public class HitJumpMod implements ClientModInitializer {
                 if (button < Mouse.getButtonCount()) {
                     return Mouse.isButtonDown(button);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
             return false;
         }
@@ -772,7 +971,7 @@ public class HitJumpMod implements ClientModInitializer {
         if (binding != null && keyBindingPressedField != null) {
             try {
                 keyBindingPressedField.setBoolean(binding, pressed);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -781,7 +980,7 @@ public class HitJumpMod implements ClientModInitializer {
         if (binding != null && keyBindingKeyCodeField != null) {
             try {
                 return keyBindingKeyCodeField.getInt(binding);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
         return fallback;
@@ -794,7 +993,7 @@ public class HitJumpMod implements ClientModInitializer {
                 && getKeyBindingCode(pickKeyBindingObj, -98) == godPlaceKeyCode) {
             try {
                 keyBindingPressTimeField.setInt(pickKeyBindingObj, 0);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -810,41 +1009,76 @@ public class HitJumpMod implements ClientModInitializer {
             try {
                 clientField.setAccessible(true);
                 maybeOptions = clientField.get(client);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
                 continue;
             }
-            if (maybeOptions == null || maybeOptions.getClass().isArray()) continue;
+            if (maybeOptions == null || maybeOptions.getClass().isArray() || isSkippableClass(maybeOptions.getClass())) continue;
 
-            for (Field optField : maybeOptions.getClass().getDeclaredFields()) {
+            Field[] optFields;
+            try {
+                optFields = maybeOptions.getClass().getDeclaredFields();
+            } catch (Throwable ignored) {
+                continue;
+            }
+            for (Field optField : optFields) {
                 if (Modifier.isStatic(optField.getModifiers()) || optField.getType().isPrimitive()) continue;
                 Object val;
                 try {
                     optField.setAccessible(true);
                     val = optField.get(maybeOptions);
-                } catch (Exception ignored) {
+                } catch (Throwable ignored) {
                     continue;
                 }
-                if (val == null || val.getClass().isArray()) continue;
-                String desc = getKeyBindingDescription(val);
-                if ("key.use".equals(desc)) {
-                    useKeyBindingObj = val;
-                    locateKeyBindingInternalFields(val.getClass());
-                } else if ("key.pickItem".equals(desc)) {
-                    pickKeyBindingObj = val;
-                    locateKeyBindingInternalFields(val.getClass());
-                } else if ("key.sprint".equals(desc)) {
-                    sprintKeyBindingObj = val;
-                    locateKeyBindingInternalFields(val.getClass());
+                if (val == null) continue;
+                if (val instanceof Object[]) {
+                    Object[] arr = (Object[]) val;
+                    for (int k = 0; k < arr.length; k++) {
+                        if (arr[k] != null && !isSkippableClass(arr[k].getClass())) {
+                            registerKeyBindingCandidate(arr[k]);
+                        }
+                    }
+                } else if (!val.getClass().isArray() && !isSkippableClass(val.getClass())) {
+                    registerKeyBindingCandidate(val);
                 }
             }
-            if (useKeyBindingObj != null || sprintKeyBindingObj != null) {
+            if (useKeyBindingObj != null || sprintKeyBindingObj != null || !movementKeyBindings.isEmpty()) {
                 return;
             }
         }
     }
 
+    private static void registerKeyBindingCandidate(Object val) {
+        String desc = getKeyBindingDescription(val);
+        if (desc == null) {
+            return;
+        }
+        locateKeyBindingInternalFields(val.getClass());
+        if ("key.use".equals(desc)) {
+            useKeyBindingObj = val;
+        } else if ("key.pickItem".equals(desc)) {
+            pickKeyBindingObj = val;
+        } else if ("key.sprint".equals(desc)) {
+            sprintKeyBindingObj = val;
+            if (!movementKeyBindings.contains(val)) movementKeyBindings.add(val);
+        } else if ("key.forward".equals(desc)
+                || "key.back".equals(desc)
+                || "key.left".equals(desc)
+                || "key.right".equals(desc)
+                || "key.jump".equals(desc)
+                || "key.sneak".equals(desc)) {
+            if (!movementKeyBindings.contains(val)) movementKeyBindings.add(val);
+        } else if (desc.startsWith("key.hotbar.")) {
+            if (!hotbarKeyBindings.contains(val)) hotbarKeyBindings.add(val);
+        }
+    }
+
     private static String getKeyBindingDescription(Object obj) {
-        Field[] fields = obj.getClass().getDeclaredFields();
+        Field[] fields;
+        try {
+            fields = obj.getClass().getDeclaredFields();
+        } catch (Throwable ignored) {
+            return null;
+        }
         if (fields.length > 20) {
             return null;
         }
@@ -853,10 +1087,13 @@ public class HitJumpMod implements ClientModInitializer {
                 try {
                     f.setAccessible(true);
                     Object s = f.get(obj);
-                    if ("key.use".equals(s) || "key.pickItem".equals(s) || "key.sprint".equals(s)) {
-                        return (String) s;
+                    if (s instanceof String) {
+                        String str = (String) s;
+                        if (str.startsWith("key.")) {
+                            return str;
+                        }
                     }
-                } catch (Exception ignored) {
+                } catch (Throwable ignored) {
                 }
             }
         }
@@ -867,31 +1104,42 @@ public class HitJumpMod implements ClientModInitializer {
         if (keyBindingPressedField != null && keyBindingKeyCodeField != null) {
             return;
         }
-        Field[] fields = keyBindingClass.getDeclaredFields();
+        Field[] fields;
+        try {
+            fields = keyBindingClass.getDeclaredFields();
+        } catch (Throwable ignored) {
+            return;
+        }
         for (int i = 0; i < fields.length - 1; i++) {
             if (isInstanceField(fields[i], int.class)
                     && !Modifier.isFinal(fields[i].getModifiers())
                     && isInstanceField(fields[i + 1], boolean.class)) {
-                keyBindingKeyCodeField = fields[i];
-                keyBindingPressedField = fields[i + 1];
-                keyBindingKeyCodeField.setAccessible(true);
-                keyBindingPressedField.setAccessible(true);
-                if (i + 2 < fields.length && isInstanceField(fields[i + 2], int.class)) {
-                    keyBindingPressTimeField = fields[i + 2];
-                    keyBindingPressTimeField.setAccessible(true);
+                try {
+                    keyBindingKeyCodeField = fields[i];
+                    keyBindingPressedField = fields[i + 1];
+                    keyBindingKeyCodeField.setAccessible(true);
+                    keyBindingPressedField.setAccessible(true);
+                    if (i + 2 < fields.length && isInstanceField(fields[i + 2], int.class)) {
+                        keyBindingPressTimeField = fields[i + 2];
+                        keyBindingPressTimeField.setAccessible(true);
+                    }
+                } catch (Throwable ignored) {
                 }
                 return;
             }
         }
         for (Field f : fields) {
-            if (keyBindingPressedField == null && isInstanceField(f, boolean.class)) {
-                keyBindingPressedField = f;
-                keyBindingPressedField.setAccessible(true);
-            } else if (keyBindingKeyCodeField == null
-                    && isInstanceField(f, int.class)
-                    && !Modifier.isFinal(f.getModifiers())) {
-                keyBindingKeyCodeField = f;
-                keyBindingKeyCodeField.setAccessible(true);
+            try {
+                if (keyBindingPressedField == null && isInstanceField(f, boolean.class)) {
+                    keyBindingPressedField = f;
+                    keyBindingPressedField.setAccessible(true);
+                } else if (keyBindingKeyCodeField == null
+                        && isInstanceField(f, int.class)
+                        && !Modifier.isFinal(f.getModifiers())) {
+                    keyBindingKeyCodeField = f;
+                    keyBindingKeyCodeField.setAccessible(true);
+                }
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -908,7 +1156,7 @@ public class HitJumpMod implements ClientModInitializer {
                 if (currentDelay > targetTimer) {
                     rightClickDelayField.setInt(client, targetTimer);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -958,7 +1206,7 @@ public class HitJumpMod implements ClientModInitializer {
             List<?> bestList = null;
 
             Class<?> worldCls = client.world.getClass();
-            while (worldCls != null && worldCls != Object.class) {
+            while (worldCls != null && worldCls != Object.class && !isSkippableClass(worldCls)) {
                 for (Field f : worldCls.getDeclaredFields()) {
                     if (Modifier.isStatic(f.getModifiers())) continue;
                     if (!List.class.isAssignableFrom(f.getType())) continue;
@@ -996,7 +1244,7 @@ public class HitJumpMod implements ClientModInitializer {
                     return true;
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
         return false;
     }
@@ -1011,7 +1259,7 @@ public class HitJumpMod implements ClientModInitializer {
         try {
             headYawField.setFloat(player, entityYawField.getFloat(player));
             prevHeadYawField.setFloat(player, entityPrevYawField.getFloat(player));
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
     }
 
@@ -1020,7 +1268,7 @@ public class HitJumpMod implements ClientModInitializer {
         if (entityVelYField != null) {
             try {
                 return entityVelYField.getDouble(player);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
         return 0.0D;
@@ -1045,7 +1293,7 @@ public class HitJumpMod implements ClientModInitializer {
         if (entityDeadField != null) {
             try {
                 return entityDeadField.getBoolean(entity);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
         return false;
@@ -1057,7 +1305,7 @@ public class HitJumpMod implements ClientModInitializer {
         }
         entityMotionSearched = true;
         Class<?> cls = entity.getClass();
-        while (cls != null && cls != Object.class) {
+        while (cls != null && cls != Object.class && !isSkippableClass(cls)) {
             Field[] fields = cls.getDeclaredFields();
             for (int i = 0; i <= fields.length - 14; i++) {
                 if (isInstanceField(fields[i], double.class)
@@ -1145,7 +1393,7 @@ public class HitJumpMod implements ClientModInitializer {
         headYawSearched = true;
         Class<?> playerBaseClass = getPlayerBaseClass(player);
         Class<?> cls = player.getClass();
-        while (cls != null && cls != Object.class) {
+        while (cls != null && cls != Object.class && !isSkippableClass(cls)) {
             Field[] fields = cls.getDeclaredFields();
             for (int i = 0; i <= fields.length - 9; i++) {
                 if (isInstanceField(fields[i], float.class)
@@ -1175,18 +1423,18 @@ public class HitJumpMod implements ClientModInitializer {
         }
         inputFieldsSearched = true;
         Class<?> cls = player.getClass();
-        while (cls != null && cls != Object.class) {
+        while (cls != null && cls != Object.class && !isSkippableClass(cls)) {
             for (Field f : cls.getDeclaredFields()) {
                 if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
                 try {
                     f.setAccessible(true);
                     Object val = f.get(player);
-                    if (val == null) continue;
+                    if (val == null || isSkippableClass(val.getClass())) continue;
                     if (bindInputClassFields(val.getClass())) {
                         playerInputField = f;
                         return;
                     }
-                } catch (Exception ignored) {
+                } catch (Throwable ignored) {
                 }
             }
             cls = cls.getSuperclass();
@@ -1195,7 +1443,7 @@ public class HitJumpMod implements ClientModInitializer {
 
     private static boolean bindInputClassFields(Class<?> startClass) {
         Class<?> cls = startClass;
-        while (cls != null && cls != Object.class) {
+        while (cls != null && cls != Object.class && !isSkippableClass(cls)) {
             Field[] fields = cls.getDeclaredFields();
             if (fields.length >= 4 && fields.length <= 8) {
                 for (int i = 0; i <= fields.length - 4; i++) {
@@ -1226,7 +1474,7 @@ public class HitJumpMod implements ClientModInitializer {
                 if (input != null) {
                     return inputSneakField.getBoolean(input);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
         return false;
@@ -1240,7 +1488,7 @@ public class HitJumpMod implements ClientModInitializer {
                 if (input != null) {
                     return inputForwardField.getFloat(input);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
         return 0.0F;
@@ -1254,62 +1502,71 @@ public class HitJumpMod implements ClientModInitializer {
                 if (input != null) {
                     return inputStrafeField.getFloat(input);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
         return 0.0F;
     }
 
     static int getPerspective(Minecraft client) {
-        if (!perspectiveSearched) {
-            perspectiveSearched = true;
-            for (Field f : client.getClass().getDeclaredFields()) {
-                if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
-                try {
-                    f.setAccessible(true);
-                    Object obj = f.get(client);
-                    if (obj == null) continue;
-                    Field tpv = findThirdPersonViewField(obj.getClass());
-                    if (tpv != null) {
-                        optionsObjectField = f;
-                        thirdPersonViewField = tpv;
-                        break;
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-        }
+        ensureOptionsFields(client);
         if (optionsObjectField != null && thirdPersonViewField != null) {
             try {
                 Object opts = optionsObjectField.get(client);
                 if (opts != null) {
                     return thirdPersonViewField.getInt(opts);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
         return 0;
     }
 
-    private static Field findThirdPersonViewField(Class<?> optionsClass) {
-        Field[] fields = optionsClass.getDeclaredFields();
-        for (int i = 0; i <= fields.length - 11; i++) {
-            if (isInstanceField(fields[i], boolean.class)
-                    && isInstanceField(fields[i + 1], int.class)
-                    && isInstanceField(fields[i + 2], boolean.class)
-                    && isInstanceField(fields[i + 3], boolean.class)
-                    && isInstanceField(fields[i + 4], boolean.class)
-                    && isInstanceField(fields[i + 5], String.class)
-                    && isInstanceField(fields[i + 6], boolean.class)
-                    && isInstanceField(fields[i + 7], boolean.class)
-                    && isInstanceField(fields[i + 8], float.class)
-                    && isInstanceField(fields[i + 9], float.class)
-                    && isInstanceField(fields[i + 10], float.class)) {
-                fields[i + 1].setAccessible(true);
-                return fields[i + 1];
+    private static void ensureOptionsFields(Minecraft client) {
+        if (perspectiveSearched || client == null) {
+            return;
+        }
+        perspectiveSearched = true;
+        for (Field f : client.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
+            Object obj;
+            try {
+                f.setAccessible(true);
+                obj = f.get(client);
+            } catch (Throwable ignored) {
+                continue;
+            }
+            if (obj == null || obj.getClass().isArray() || isSkippableClass(obj.getClass())) continue;
+            Field[] fields;
+            try {
+                fields = obj.getClass().getDeclaredFields();
+            } catch (Throwable ignored) {
+                continue;
+            }
+            for (int i = 0; i <= fields.length - 11; i++) {
+                if (isInstanceField(fields[i], boolean.class)
+                        && isInstanceField(fields[i + 1], int.class)
+                        && isInstanceField(fields[i + 2], boolean.class)
+                        && isInstanceField(fields[i + 3], boolean.class)
+                        && isInstanceField(fields[i + 4], boolean.class)
+                        && isInstanceField(fields[i + 5], String.class)
+                        && isInstanceField(fields[i + 6], boolean.class)
+                        && isInstanceField(fields[i + 7], boolean.class)
+                        && isInstanceField(fields[i + 8], float.class)
+                        && isInstanceField(fields[i + 9], float.class)
+                        && isInstanceField(fields[i + 10], float.class)) {
+                    try {
+                        optionsObjectField = f;
+                        thirdPersonViewField = fields[i + 1];
+                        gammaField = fields[i + 9];
+                        thirdPersonViewField.setAccessible(true);
+                        gammaField.setAccessible(true);
+                    } catch (Throwable ignored) {
+                    }
+                    return;
+                }
             }
         }
-        return null;
     }
 
     private static boolean isKeyDownSafe(int keyCode) {
@@ -1318,7 +1575,7 @@ public class HitJumpMod implements ClientModInitializer {
         }
         try {
             return Keyboard.isKeyDown(keyCode);
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
             return false;
         }
     }
@@ -1334,7 +1591,7 @@ public class HitJumpMod implements ClientModInitializer {
                 if (currentDelay > maxDelayTicks && currentDelay <= 10) {
                     attackCooldownField.setInt(client, maxDelayTicks);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -1355,7 +1612,7 @@ public class HitJumpMod implements ClientModInitializer {
         return null;
     }
 
-private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
+    private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
         if (!jumpTicksSearched) {
             jumpTicksField = findJumpTicksField(player.getClass());
             jumpTicksSearched = true;
@@ -1366,14 +1623,14 @@ private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
                 if (currentDelay > maxDelayTicks) {
                     jumpTicksField.setInt(player, maxDelayTicks);
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
     }
 
     private static Field findJumpTicksField(Class<?> startClass) {
         Class<?> cls = startClass;
-        while (cls != null && cls != Object.class) {
+        while (cls != null && cls != Object.class && !isSkippableClass(cls)) {
             Field[] fields = cls.getDeclaredFields();
             for (int i = 0; i <= fields.length - 8; i++) {
                 if (isInstanceField(fields[i], boolean.class)
@@ -1401,7 +1658,7 @@ private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
         if (hurtTimeField != null) {
             try {
                 return hurtTimeField.getInt(entity);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
         return 0;
@@ -1409,7 +1666,7 @@ private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
 
     private static Field findHurtTimeField(Class<?> startClass) {
         Class<?> cls = startClass;
-        while (cls != null && cls != Object.class) {
+        while (cls != null && cls != Object.class && !isSkippableClass(cls)) {
             Field[] fields = cls.getDeclaredFields();
             for (int i = 0; i <= fields.length - 9; i++) {
                 if (isInstanceField(fields[i], boolean.class)
@@ -1432,6 +1689,21 @@ private static void applyNoJumpDelay(Object player, int maxDelayTicks) {
 
     private static boolean isInstanceField(Field field, Class<?> expectedType) {
         return !Modifier.isStatic(field.getModifiers()) && field.getType() == expectedType;
+    }
+
+    private static boolean isSkippableClass(Class<?> cls) {
+        if (cls == null) return true;
+        String name = cls.getName();
+        return name.startsWith("java.")
+                || name.startsWith("javax.")
+                || name.startsWith("jdk.")
+                || name.startsWith("sun.")
+                || name.startsWith("com.google.")
+                || name.startsWith("org.apache.")
+                || name.startsWith("io.netty.")
+                || name.startsWith("it.unimi.")
+                || name.startsWith("org.lwjgl.")
+                || name.startsWith("org.slf4j.");
     }
 
     private static boolean rollFrequency(int frequencyPercent) {
