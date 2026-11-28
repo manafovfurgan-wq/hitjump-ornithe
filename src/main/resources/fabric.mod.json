@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "hitjump",
-  "version": "${version}",
-  "name": "Tomato Cream V4",
-  "description": "v4 Private 1.8.9 PvP & QoL suite: HitJump, Delay Fixes, GodPlace, Visuals, 1.7 Animations, and Sound Mixer.",
+  "version": "5.0+mc1.8.9",
+  "name": "Skill Issue+ v5.0",
+  "description": "Custom Private 1.8.9 PvP & QoL suite: Visuals, 1.7 Animations, and Sound Mixer.",
   "authors": ["Thewier"],
   "icon": "assets/hitjump/icon.png",
   "license": "MIT",
