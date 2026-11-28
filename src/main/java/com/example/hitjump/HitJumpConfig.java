@@ -55,10 +55,12 @@ public class HitJumpConfig {
     public boolean noJumpDelayEnabled = true;
     public int jumpDelayTicks = 0;
 
-    // Movement: Toggle Sprint
+    // Movement: Toggle Sprint & QoL
     public boolean toggleSprintEnabled = true;
     public boolean toggleSprintActive = true;
     public int toggleSprintKeyCode = Keyboard.KEY_G;
+    public boolean keepMovingAfterGuiEnabled = true;
+    public boolean noScrollEnabled = false;
 
     // Movement: NoSlow (defaults to Disabled for multiplayer anti-cheat safety)
     public boolean noSlowEnabled = false;
@@ -81,11 +83,21 @@ public class HitJumpConfig {
     public boolean invisHitboxEnabled = true;
     public int invisHitboxColor = 0xFF2626;
 
-    // Visuals: Custom Block Outline
+    // Visuals: Custom Block Outline & Block Overlay
     public boolean blockOutlineEnabled = true;
+    public boolean blockOutlineFullBlock = false; // false = Accurate block shape, true = Full 1x1x1 Cube
     public int blockOutlineWidth = 20; // 5..80 -> 0.5px..8.0px
     public int blockOutlineColor = 0xFFFFFF;
     public int blockOutlineOpacity = 85; // 0..100%
+
+    public boolean blockOverlayEnabled = false;
+    public boolean blockOverlayFaceOnly = true; // true = Aimed Block Face, false = Full Cube (See-Through)
+    public int blockOverlayBlendMode = 0; // 0 = Normal, 1 = Additive (Glow), 2 = Invert (Contrast)
+    public int blockOverlayColor = 0xFFFFFF;
+    public int blockOverlayOpacity = 30; // 0..100%
+
+    // Visuals: Night Vision / Fullbright
+    public boolean nightVisionEnabled = false;
 
     // Visuals: Nametags, Distance, Armor, TNT, Hit Color, Inventory, Parallax
     public boolean wallNametagsEnabled = true;
@@ -122,7 +134,7 @@ public class HitJumpConfig {
     public int parodyTextColor = 0xFFFFFF;
     public boolean parodyTextShadow = true;
     public boolean parodyShowHeader = true;
-    public String parodyHeaderText = "Tomato Cream";
+    public String parodyHeaderText = "Skill Issue+";
     public boolean parodyShowBackground = true;
     public int parodyBgOpacity = 35;
     public boolean parodyChromaWave = false;
@@ -226,6 +238,8 @@ public class HitJumpConfig {
         this.toggleSprintEnabled = true;
         this.toggleSprintActive = true;
         this.toggleSprintKeyCode = Keyboard.KEY_G;
+        this.keepMovingAfterGuiEnabled = true;
+        this.noScrollEnabled = false;
 
         this.noSlowEnabled = false;
         this.noSlowItems = true;
@@ -246,9 +260,18 @@ public class HitJumpConfig {
         this.invisHitboxColor = 0xFF2626;
 
         this.blockOutlineEnabled = true;
+        this.blockOutlineFullBlock = false;
         this.blockOutlineWidth = 20;
         this.blockOutlineColor = 0xFFFFFF;
         this.blockOutlineOpacity = 85;
+
+        this.blockOverlayEnabled = false;
+        this.blockOverlayFaceOnly = true;
+        this.blockOverlayBlendMode = 0;
+        this.blockOverlayColor = 0xFFFFFF;
+        this.blockOverlayOpacity = 30;
+
+        this.nightVisionEnabled = false;
 
         this.wallNametagsEnabled = true;
         this.nametagRange = 128;
@@ -282,7 +305,7 @@ public class HitJumpConfig {
         this.parodyTextColor = 0xFFFFFF;
         this.parodyTextShadow = true;
         this.parodyShowHeader = true;
-        this.parodyHeaderText = "Tomato Cream";
+        this.parodyHeaderText = "Skill Issue+";
         this.parodyShowBackground = true;
         this.parodyBgOpacity = 35;
         this.parodyChromaWave = false;
@@ -345,6 +368,10 @@ public class HitJumpConfig {
         blockOutlineColor &= 0xFFFFFF;
         blockOutlineOpacity = clamp(blockOutlineOpacity, 0, 100);
 
+        blockOverlayBlendMode = clamp(blockOverlayBlendMode, 0, 2);
+        blockOverlayColor &= 0xFFFFFF;
+        blockOverlayOpacity = clamp(blockOverlayOpacity, 0, 100);
+
         nametagBgColor &= 0xFFFFFF;
         nametagBgOpacity = clamp(nametagBgOpacity, 0, 100);
 
@@ -358,7 +385,7 @@ public class HitJumpConfig {
         parodyTextColor &= 0xFFFFFF;
         parodyBgOpacity = clamp(parodyBgOpacity, 0, 100);
         if (parodyHeaderText == null) {
-            parodyHeaderText = "Tomato Cream";
+            parodyHeaderText = "Skill Issue+";
         }
         if (parodyLines == null) {
             parodyLines = createDefaultParodyLines();
