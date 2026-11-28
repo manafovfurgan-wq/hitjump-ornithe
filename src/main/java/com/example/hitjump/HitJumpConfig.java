@@ -62,7 +62,7 @@ public class HitJumpConfig {
     public boolean keepMovingAfterGuiEnabled = true;
     public boolean noScrollEnabled = false;
 
-    // Movement: NoSlow (defaults to Disabled for multiplayer anti-cheat safety)
+    // Movement: NoSlow
     public boolean noSlowEnabled = false;
     public boolean noSlowItems = true;
     public boolean noSlowCobwebs = true;
@@ -85,16 +85,16 @@ public class HitJumpConfig {
 
     // Visuals: Custom Block Outline & Block Overlay
     public boolean blockOutlineEnabled = true;
-    public boolean blockOutlineFullBlock = false; // false = Accurate block shape, true = Full 1x1x1 Cube
-    public int blockOutlineWidth = 20; // 5..80 -> 0.5px..8.0px
+    public boolean blockOutlineFullBlock = false;
+    public int blockOutlineWidth = 20;
     public int blockOutlineColor = 0xFFFFFF;
-    public int blockOutlineOpacity = 85; // 0..100%
+    public int blockOutlineOpacity = 85;
 
     public boolean blockOverlayEnabled = false;
-    public boolean blockOverlayFaceOnly = true; // true = Aimed Block Face, false = Full Cube (See-Through)
-    public int blockOverlayBlendMode = 0; // 0 = Normal, 1 = Additive (Glow), 2 = Invert (Contrast)
+    public boolean blockOverlayFaceOnly = true;
+    public int blockOverlayBlendMode = 0; // 0 = Normal, 1 = Additive, 2 = Invert
     public int blockOverlayColor = 0xFFFFFF;
-    public int blockOverlayOpacity = 30; // 0..100%
+    public int blockOverlayOpacity = 30;
 
     // Visuals: Night Vision / Fullbright
     public boolean nightVisionEnabled = false;
@@ -106,7 +106,7 @@ public class HitJumpConfig {
     public int nametagBgOpacity = 35;
 
     public boolean showDistanceTag = true;
-    public boolean distanceUnitBlocks = false; // false = M (Meters), true = B (Blocks)
+    public boolean distanceUnitBlocks = false;
 
     public boolean armorEnchantInfoEnabled = true;
     public boolean tntTimerEnabled = true;
@@ -130,7 +130,7 @@ public class HitJumpConfig {
     public boolean parodySortByWidth = true;
     public int parodyOffsetX = 6;
     public int parodyOffsetY = 6;
-    public int parodyScale = 100; // 50..200 (0.50x..2.00x)
+    public int parodyScale = 100;
     public int parodyTextColor = 0xFFFFFF;
     public boolean parodyTextShadow = true;
     public boolean parodyShowHeader = true;
@@ -140,7 +140,90 @@ public class HitJumpConfig {
     public boolean parodyChromaWave = false;
     public List<ParodyLine> parodyLines = createDefaultParodyLines();
 
-    // Audio: Sound Mixer (Volume: 0..200%, Pitch: 50..200 -> 0.50x..2.00x)
+    // HUD Wave 2: FPS
+    public boolean fpsHudEnabled = true;
+    public int fpsX = 6;
+    public int fpsY = 126;
+    public int fpsScale = 100;
+    public int fpsColor = 0xFFFFFF;
+    public boolean fpsChroma = false;
+    public int fpsBgColor = 0x000000;
+    public int fpsBgOpacity = 40;
+
+    // HUD Wave 2: CPS
+    public boolean cpsHudEnabled = true;
+    public int cpsMode = 0; // 0 = LMB | RMB, 1 = LMB Only, 2 = RMB Only
+    public int cpsX = 6;
+    public int cpsY = 144;
+    public int cpsScale = 100;
+    public int cpsColor = 0xFFFFFF;
+    public boolean cpsChroma = false;
+    public int cpsBgColor = 0x000000;
+    public int cpsBgOpacity = 40;
+
+    // HUD Wave 2: Keystrokes
+    public boolean keystrokesEnabled = true;
+    public boolean keystrokesShowCps = true;
+    public boolean keystrokesShowSpace = true;
+    public int keystrokesX = 6;
+    public int keystrokesY = 164;
+    public int keystrokesScale = 100;
+    public int keystrokesColor = 0xFFFFFF;
+    public boolean keystrokesChroma = false;
+    public int keystrokesBgColor = 0x000000;
+    public int keystrokesBgOpacity = 45;
+
+    // HUD Wave 2: Bedrock Mini-Player (Paper Doll)
+    public boolean paperDollEnabled = true;
+    public boolean paperDollDynamic = true; // true = Bedrock Dynamic, false = Always Visible
+    public int paperDollX = 28;
+    public int paperDollY = 58;
+    public int paperDollScale = 100;
+
+    // HUD Wave 2: Bedwars Strategy Tips Box
+    public boolean bedwarsTipsEnabled = true;
+    public boolean bedwarsTipsDemo = false;
+    public int bedwarsTipsX = 6;
+    public int bedwarsTipsY = 258;
+    public int bedwarsTipsScale = 90;
+    public int bedwarsTipsColor = 0xFFFFFF;
+    public boolean bedwarsTipsChroma = false;
+    public int bedwarsTipsBgColor = 0x000000;
+    public int bedwarsTipsBgOpacity = 45;
+
+    // HUD Wave 2: Custom Scoreboard (Sidebar)
+    public boolean scoreboardHudEnabled = false;
+    public boolean scoreboardHideNumbers = true;
+    public int scoreboardX = -1; // -1 = auto right edge
+    public int scoreboardY = 120;
+    public int scoreboardScale = 100;
+    public int scoreboardColor = 0xFFFFFF;
+    public boolean scoreboardChroma = false;
+    public int scoreboardBgColor = 0x000000;
+    public int scoreboardBgOpacity = 40;
+
+    // HUD Wave 2: Custom Chat Box
+    public boolean chatHudEnabled = false;
+    public int chatHudX = 6;
+    public int chatHudY = -1; // -1 = auto above hotbar
+    public int chatHudScale = 100;
+    public int chatHudColor = 0xFFFFFF;
+    public boolean chatHudChroma = false;
+    public int chatHudBgColor = 0x000000;
+    public int chatHudBgOpacity = 25;
+    public int chatHudMaxLines = 8;
+
+    // HUD Wave 2: Custom Tab Overlay
+    public boolean tabHudEnabled = false;
+    public int tabHudX = -1; // -1 = auto center
+    public int tabHudY = 14;
+    public int tabHudScale = 100;
+    public int tabHudColor = 0xFFFFFF;
+    public boolean tabHudChroma = false;
+    public int tabHudBgColor = 0x000000;
+    public int tabHudBgOpacity = 50;
+
+    // Audio: Sound Mixer
     public boolean soundMixerEnabled = true;
 
     public boolean soundHitEnabled = true;
@@ -175,7 +258,7 @@ public class HitJumpConfig {
 
     // Settings: Anti-Accidental Menu Trigger
     public int menuKeyCode = Keyboard.KEY_H;
-    public int menuTriggerMode = 0; // 0 = Double-Tap, 1 = Modifier + Key, 2 = Single Press
+    public int menuTriggerMode = 0;
     public int menuModifierKey = Keyboard.KEY_LCONTROL;
 
     public static List<ParodyLine> createDefaultParodyLines() {
@@ -311,37 +394,51 @@ public class HitJumpConfig {
         this.parodyChromaWave = false;
         this.parodyLines = createDefaultParodyLines();
 
+        this.fpsHudEnabled = true;
+        this.fpsX = 6; this.fpsY = 126; this.fpsScale = 100;
+        this.fpsColor = 0xFFFFFF; this.fpsChroma = false;
+        this.fpsBgColor = 0x000000; this.fpsBgOpacity = 40;
+
+        this.cpsHudEnabled = true; this.cpsMode = 0;
+        this.cpsX = 6; this.cpsY = 144; this.cpsScale = 100;
+        this.cpsColor = 0xFFFFFF; this.cpsChroma = false;
+        this.cpsBgColor = 0x000000; this.cpsBgOpacity = 40;
+
+        this.keystrokesEnabled = true; this.keystrokesShowCps = true; this.keystrokesShowSpace = true;
+        this.keystrokesX = 6; this.keystrokesY = 164; this.keystrokesScale = 100;
+        this.keystrokesColor = 0xFFFFFF; this.keystrokesChroma = false;
+        this.keystrokesBgColor = 0x000000; this.keystrokesBgOpacity = 45;
+
+        this.paperDollEnabled = true; this.paperDollDynamic = true;
+        this.paperDollX = 28; this.paperDollY = 58; this.paperDollScale = 100;
+
+        this.bedwarsTipsEnabled = true; this.bedwarsTipsDemo = false;
+        this.bedwarsTipsX = 6; this.bedwarsTipsY = 258; this.bedwarsTipsScale = 90;
+        this.bedwarsTipsColor = 0xFFFFFF; this.bedwarsTipsChroma = false;
+        this.bedwarsTipsBgColor = 0x000000; this.bedwarsTipsBgOpacity = 45;
+
+        this.scoreboardHudEnabled = false; this.scoreboardHideNumbers = true;
+        this.scoreboardX = -1; this.scoreboardY = 120; this.scoreboardScale = 100;
+        this.scoreboardColor = 0xFFFFFF; this.scoreboardChroma = false;
+        this.scoreboardBgColor = 0x000000; this.scoreboardBgOpacity = 40;
+
+        this.chatHudEnabled = false; this.chatHudMaxLines = 8;
+        this.chatHudX = 6; this.chatHudY = -1; this.chatHudScale = 100;
+        this.chatHudColor = 0xFFFFFF; this.chatHudChroma = false;
+        this.chatHudBgColor = 0x000000; this.chatHudBgOpacity = 25;
+
+        this.tabHudEnabled = false;
+        this.tabHudX = -1; this.tabHudY = 14; this.tabHudScale = 100;
+        this.tabHudColor = 0xFFFFFF; this.tabHudChroma = false;
+        this.tabHudBgColor = 0x000000; this.tabHudBgOpacity = 50;
+
         this.soundMixerEnabled = true;
-
-        this.soundHitEnabled = true;
-        this.soundHitMuted = false;
-        this.soundHitVolume = 100;
-        this.soundHitPitch = 100;
-
-        this.soundExplosionEnabled = true;
-        this.soundExplosionMuted = false;
-        this.soundExplosionVolume = 100;
-        this.soundExplosionPitch = 100;
-
-        this.soundLightningEnabled = true;
-        this.soundLightningMuted = false;
-        this.soundLightningVolume = 100;
-        this.soundLightningPitch = 100;
-
-        this.soundRainEnabled = false;
-        this.soundRainMuted = false;
-        this.soundRainVolume = 100;
-        this.soundRainPitch = 100;
-
-        this.soundPortalEnabled = false;
-        this.soundPortalMuted = false;
-        this.soundPortalVolume = 100;
-        this.soundPortalPitch = 100;
-
-        this.soundGhastEnabled = false;
-        this.soundGhastMuted = false;
-        this.soundGhastVolume = 100;
-        this.soundGhastPitch = 100;
+        this.soundHitEnabled = true; this.soundHitMuted = false; this.soundHitVolume = 100; this.soundHitPitch = 100;
+        this.soundExplosionEnabled = true; this.soundExplosionMuted = false; this.soundExplosionVolume = 100; this.soundExplosionPitch = 100;
+        this.soundLightningEnabled = true; this.soundLightningMuted = false; this.soundLightningVolume = 100; this.soundLightningPitch = 100;
+        this.soundRainEnabled = false; this.soundRainMuted = false; this.soundRainVolume = 100; this.soundRainPitch = 100;
+        this.soundPortalEnabled = false; this.soundPortalMuted = false; this.soundPortalVolume = 100; this.soundPortalPitch = 100;
+        this.soundGhastEnabled = false; this.soundGhastMuted = false; this.soundGhastVolume = 100; this.soundGhastPitch = 100;
 
         this.menuKeyCode = Keyboard.KEY_H;
         this.menuTriggerMode = 0;
@@ -363,54 +460,49 @@ public class HitJumpConfig {
         nametagRange = clamp(nametagRange, 16, 256);
 
         invisHitboxColor &= 0xFFFFFF;
-
         blockOutlineWidth = clamp(blockOutlineWidth, 5, 80);
         blockOutlineColor &= 0xFFFFFF;
         blockOutlineOpacity = clamp(blockOutlineOpacity, 0, 100);
-
         blockOverlayBlendMode = clamp(blockOverlayBlendMode, 0, 2);
         blockOverlayColor &= 0xFFFFFF;
         blockOverlayOpacity = clamp(blockOverlayOpacity, 0, 100);
-
         nametagBgColor &= 0xFFFFFF;
         nametagBgOpacity = clamp(nametagBgOpacity, 0, 100);
-
         customHitColor &= 0xFFFFFF;
         customHitOpacity = clamp(customHitOpacity, 0, 100);
 
         parodyCorner = clamp(parodyCorner, 0, 3);
-        parodyOffsetX = clamp(parodyOffsetX, 0, 150);
-        parodyOffsetY = clamp(parodyOffsetY, 0, 150);
+        parodyOffsetX = clamp(parodyOffsetX, 0, 300);
+        parodyOffsetY = clamp(parodyOffsetY, 0, 300);
         parodyScale = clamp(parodyScale, 50, 200);
         parodyTextColor &= 0xFFFFFF;
         parodyBgOpacity = clamp(parodyBgOpacity, 0, 100);
-        if (parodyHeaderText == null) {
-            parodyHeaderText = "Skill Issue+";
-        }
+        if (parodyHeaderText == null) parodyHeaderText = "Skill Issue+";
         if (parodyLines == null) {
             parodyLines = createDefaultParodyLines();
         } else {
             Iterator<ParodyLine> it = parodyLines.iterator();
             while (it.hasNext()) {
                 ParodyLine line = it.next();
-                if (line == null || line.text == null) {
-                    it.remove();
-                }
+                if (line == null || line.text == null) it.remove();
             }
         }
 
-        soundHitVolume = clamp(soundHitVolume, 0, 200);
-        soundHitPitch = clamp(soundHitPitch, 50, 200);
-        soundExplosionVolume = clamp(soundExplosionVolume, 0, 200);
-        soundExplosionPitch = clamp(soundExplosionPitch, 50, 200);
-        soundLightningVolume = clamp(soundLightningVolume, 0, 200);
-        soundLightningPitch = clamp(soundLightningPitch, 50, 200);
-        soundRainVolume = clamp(soundRainVolume, 0, 200);
-        soundRainPitch = clamp(soundRainPitch, 50, 200);
-        soundPortalVolume = clamp(soundPortalVolume, 0, 200);
-        soundPortalPitch = clamp(soundPortalPitch, 50, 200);
-        soundGhastVolume = clamp(soundGhastVolume, 0, 200);
-        soundGhastPitch = clamp(soundGhastPitch, 50, 200);
+        fpsScale = clamp(fpsScale, 50, 200); fpsColor &= 0xFFFFFF; fpsBgColor &= 0xFFFFFF; fpsBgOpacity = clamp(fpsBgOpacity, 0, 100);
+        cpsMode = clamp(cpsMode, 0, 2); cpsScale = clamp(cpsScale, 50, 200); cpsColor &= 0xFFFFFF; cpsBgColor &= 0xFFFFFF; cpsBgOpacity = clamp(cpsBgOpacity, 0, 100);
+        keystrokesScale = clamp(keystrokesScale, 50, 200); keystrokesColor &= 0xFFFFFF; keystrokesBgColor &= 0xFFFFFF; keystrokesBgOpacity = clamp(keystrokesBgOpacity, 0, 100);
+        paperDollScale = clamp(paperDollScale, 50, 200);
+        bedwarsTipsScale = clamp(bedwarsTipsScale, 50, 200); bedwarsTipsColor &= 0xFFFFFF; bedwarsTipsBgColor &= 0xFFFFFF; bedwarsTipsBgOpacity = clamp(bedwarsTipsBgOpacity, 0, 100);
+        scoreboardScale = clamp(scoreboardScale, 50, 200); scoreboardColor &= 0xFFFFFF; scoreboardBgColor &= 0xFFFFFF; scoreboardBgOpacity = clamp(scoreboardBgOpacity, 0, 100);
+        chatHudScale = clamp(chatHudScale, 50, 200); chatHudColor &= 0xFFFFFF; chatHudBgColor &= 0xFFFFFF; chatHudBgOpacity = clamp(chatHudBgOpacity, 0, 100); chatHudMaxLines = clamp(chatHudMaxLines, 3, 16);
+        tabHudScale = clamp(tabHudScale, 50, 200); tabHudColor &= 0xFFFFFF; tabHudBgColor &= 0xFFFFFF; tabHudBgOpacity = clamp(tabHudBgOpacity, 0, 100);
+
+        soundHitVolume = clamp(soundHitVolume, 0, 200); soundHitPitch = clamp(soundHitPitch, 50, 200);
+        soundExplosionVolume = clamp(soundExplosionVolume, 0, 200); soundExplosionPitch = clamp(soundExplosionPitch, 50, 200);
+        soundLightningVolume = clamp(soundLightningVolume, 0, 200); soundLightningPitch = clamp(soundLightningPitch, 50, 200);
+        soundRainVolume = clamp(soundRainVolume, 0, 200); soundRainPitch = clamp(soundRainPitch, 50, 200);
+        soundPortalVolume = clamp(soundPortalVolume, 0, 200); soundPortalPitch = clamp(soundPortalPitch, 50, 200);
+        soundGhastVolume = clamp(soundGhastVolume, 0, 200); soundGhastPitch = clamp(soundGhastPitch, 50, 200);
 
         if (menuKeyCode <= 0 || menuKeyCode >= 256) menuKeyCode = Keyboard.KEY_H;
         menuTriggerMode = clamp(menuTriggerMode, 0, 2);
@@ -418,14 +510,10 @@ public class HitJumpConfig {
     }
 
     private static boolean isValidBind(int code) {
-        boolean mouse = (code >= -100 && code <= -85);
-        boolean key = (code > 0 && code < 256);
-        return mouse || key;
+        return (code >= -100 && code <= -85) || (code > 0 && code < 256);
     }
 
     private static int clamp(int val, int min, int max) {
-        if (val < min) return min;
-        if (val > max) return max;
-        return val;
+        return val < min ? min : (val > max ? max : val);
     }
 }
