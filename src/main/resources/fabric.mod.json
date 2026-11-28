@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "hitjump",
-  "version": "5.0+mc1.8.9",
-  "name": "Skill Issue+ v5.0",
-  "description": "Custom Private 1.8.9 PvP & QoL suite: Visuals, 1.7 Animations, and Sound Mixer.",
+  "version": "6.0+mc1.8.9",
+  "name": "Skill Issue+ v6.0",
+  "description": "1.8.9 PvP, Hitbox Animations, Visuals, Pets, Sound Mixer, and Modular HUD suite.",
   "authors": ["Thewier"],
   "icon": "assets/hitjump/icon.png",
   "license": "MIT",
