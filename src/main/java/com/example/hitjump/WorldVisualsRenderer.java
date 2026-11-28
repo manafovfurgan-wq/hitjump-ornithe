@@ -186,7 +186,7 @@ public class WorldVisualsRenderer {
         float invisG = ((config.invisHitboxColor >> 8) & 0xFF) / 255.0F;
         float invisB = (config.invisHitboxColor & 0xFF) / 255.0F;
 
-        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_LINE_BIT | GL11.GL_LIGHTING_BIT);
         GL11.glMatrixMode(GL11.GL_PROJECTION);
         GL11.glPushMatrix();
         PROJECTION_MATRIX.clear();
