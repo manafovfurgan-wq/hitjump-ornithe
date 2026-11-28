@@ -303,7 +303,7 @@ public class HitboxAnimationRenderer {
         GL11.glColor4f(r, g, b, alpha);
     }
 
-    private static void pruneStaleEntries(long now) {
+	private static void pruneStaleEntries(long now) {
         Iterator> it = entityLastSeenMs.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<Object, Long> e = it.next();
