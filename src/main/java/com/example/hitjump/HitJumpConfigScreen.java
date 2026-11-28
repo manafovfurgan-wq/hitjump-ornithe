@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class HitJumpConfigScreen extends Screen {
-    private static final String HEADER_TITLE = "Skill Issue+ v5.0 | Main menu";
+    private static final String HEADER_TITLE = "Skill Issue+ v6.0 | Main menu";
     private static final String[] TAB_NAMES = {
             "Combat", "Movement", "Building", "Visuals", "Animations", "HUD", "Audio", "Settings"
     };
@@ -57,12 +57,11 @@ public class HitJumpConfigScreen extends Screen {
     private int tooltipX = 0;
     private int tooltipY = 0;
 
-    // Per-widget toggle between editing Text Color (false) vs Background Color (true)
     private final boolean[] hudEditBgColor = new boolean[7];
 
     // 0=Invis, 1=Nametag, 2=HitColor, 3=BlockOutline, 4=ParodyHUD, 5=BlockOverlay
-    // 6..12 = Wave 2 HUD Text Colors, 13..19 = Wave 2 HUD Bg Colors
-    private final float[][] pickerHsb = new float[20][3];
+    // 6..12 = HUD Text Colors, 13..19 = HUD Bg Colors, 20 = Hitbox Anim Color
+    private final float[][] pickerHsb = new float[21][3];
 
     public HitJumpConfigScreen(Screen parent) {
         this.parent = parent;
@@ -88,13 +87,14 @@ public class HitJumpConfigScreen extends Screen {
         rgbToPicker(3, c.blockOutlineColor);
         rgbToPicker(4, c.parodyTextColor);
         rgbToPicker(5, c.blockOverlayColor);
-        rgbToPicker(6, c.fpsColor);        rgbToPicker(13, c.fpsBgColor);
-        rgbToPicker(7, c.cpsColor);        rgbToPicker(14, c.cpsBgColor);
-        rgbToPicker(8, c.keystrokesColor); rgbToPicker(15, c.keystrokesBgColor);
-        rgbToPicker(9, c.bedwarsTipsColor);rgbToPicker(16, c.bedwarsTipsBgColor);
-        rgbToPicker(10, c.scoreboardColor);rgbToPicker(17, c.scoreboardBgColor);
-        rgbToPicker(11, c.chatHudColor);   rgbToPicker(18, c.chatHudBgColor);
-        rgbToPicker(12, c.tabHudColor);    rgbToPicker(19, c.tabHudBgColor);
+        rgbToPicker(6, c.fpsColor);         rgbToPicker(13, c.fpsBgColor);
+        rgbToPicker(7, c.cpsColor);         rgbToPicker(14, c.cpsBgColor);
+        rgbToPicker(8, c.keystrokesColor);  rgbToPicker(15, c.keystrokesBgColor);
+        rgbToPicker(9, c.bedwarsTipsColor); rgbToPicker(16, c.bedwarsTipsBgColor);
+        rgbToPicker(10, c.scoreboardColor); rgbToPicker(17, c.scoreboardBgColor);
+        rgbToPicker(11, c.chatHudColor);    rgbToPicker(18, c.chatHudBgColor);
+        rgbToPicker(12, c.tabHudColor);     rgbToPicker(19, c.tabHudBgColor);
+        rgbToPicker(20, c.hitboxAnimColor);
     }
 
     private void rgbToPicker(int idx, int rgb) {
@@ -337,7 +337,7 @@ public class HitJumpConfigScreen extends Screen {
                     "Resumes movement immediately when closing inventory, chests, or menus if you are still holding WASD.", mx, my);
             iy += 22;
             c.noScrollEnabled = drawToggleRow(x + 10, iy, w - 20, "No Hotbar Scroll", c.noScrollEnabled, true,
-                    "Disables mouse wheel hotbar switching in-game so accidental scrolls never bump you off your hotkeys.", mx, my);
+                    "Locks hotbar wheel scrolling cleanly with zero flicker while keeping hotbar keys 1-9 instant.", mx, my);
             y += cardH + 8;
         }
 
@@ -379,8 +379,8 @@ public class HitJumpConfigScreen extends Screen {
             c.noSlowItems = drawToggleRow(x + 10, iy, w - 20, "Eating / Bow / Sword Block", c.noSlowItems, false,
                     "Keeps normal walking speed while eating, drinking, drawing a bow, or blocking.", mx, my);
             iy += 22;
-            c.noSlowCobwebs = drawToggleRow(x + 10, iy, w - 20, "Cobwebs", c.noSlowCobwebs, false,
-                    "Removes cobweb movement slowdown.", mx, my);
+            c.noSlowCobwebs = drawToggleRow(x + 10, iy, w - 20, "Cobwebs (SP Only)", c.noSlowCobwebs, false,
+                    "Removes cobweb slowdown in singleplayer. Multiplayer anti-cheats check web speed server-side and will rubberband.", mx, my);
             iy += 22;
             c.noSlowSoulSand = drawToggleRow(x + 10, iy, w - 20, "Soul Sand", c.noSlowSoulSand, false,
                     "Restores full walking/sprinting velocity across Soul Sand.", mx, my);
@@ -390,12 +390,19 @@ public class HitJumpConfigScreen extends Screen {
     }
 
     private int renderBuildingTab(HitJumpConfig c, int x, int y, int w, int mx, int my, String filter) {
-        if (matchesFilter(filter, "building godplace fastplace right click middle mouse place block delay")) {
-            int cardH = 92;
+        if (matchesFilter(filter, "building godplace fastplace right click middle mouse place block delay face lock straight line")) {
+            int cardH = 114;
             drawCard(x, y, w, cardH, "GodPlace (Hold Key FastPlace)");
             int iy = y + 24;
             c.godPlaceEnabled = drawToggleRow(x + 10, iy, w - 20, "GodPlace Module", c.godPlaceEnabled, true,
                     "Bypasses the 4-tick block placement cooldown only while holding your dedicated GodPlace key.", mx, my);
+            iy += 22;
+            if (drawCycleRow(x + 10, iy, w - 20, "Placement Mode",
+                    c.godPlaceMode == 1 ? "Face-Lock Line" : "Regular",
+                    "Regular fast-places anywhere; Face-Lock Line only places along the exact clicked face axis for fast straight bridges/walls.", mx, my)) {
+                c.godPlaceMode = (c.godPlaceMode + 1) % 2;
+                HitJumpConfig.save();
+            }
             iy += 22;
             drawBindRow(3, x + 10, iy, w - 20, "GodPlace Hold Key", c.godPlaceKeyCode,
                     "Hold this key/mouse button to fast-place blocks while normal Right Click stays vanilla.", mx, my);
@@ -417,7 +424,7 @@ public class HitJumpConfigScreen extends Screen {
                     "Draws crisp wireframe hitboxes around entities within your chosen render range.", mx, my);
             iy += 22;
             c.hitboxThroughWalls = drawToggleRow(x + 10, iy, w - 20, "See Through Walls", c.hitboxThroughWalls, false,
-                    "When ON, hitboxes and eye lines show through walls. Turn OFF to hide them behind blocks and terrain.", mx, my);
+                    "When ON, hitboxes and animations show through walls. Turn OFF for line-of-sight only.", mx, my);
             iy += 22;
             c.hitboxEyeLineEnabled = drawToggleRow(x + 10, iy, w - 20, "Eye-Level Line (Separate)", c.hitboxEyeLineEnabled, true,
                     "Independent toggle for the red eye-height band; works with or without the outer hitbox.", mx, my);
@@ -425,13 +432,52 @@ public class HitJumpConfigScreen extends Screen {
             String targetStr = (c.hitboxTargetMode == 1) ? "Players Only"
                     : (c.hitboxTargetMode == 2 ? "All Entities" : "Players & Mobs");
             if (drawCycleRow(x + 10, iy, w - 20, "Entity Filter", targetStr,
-                    "Choose whether hitboxes render on Players & Mobs, Players Only, or All Entities.", mx, my)) {
+                    "Choose whether hitboxes and animations render on Players & Mobs, Players Only, or All Entities.", mx, my)) {
                 c.hitboxTargetMode = (c.hitboxTargetMode + 1) % 3;
             }
             iy += 22;
             c.hitboxRange = drawSliderRow(401, x + 10, iy, w - 20, "Hitbox Render Range",
-                    c.hitboxRange, 8, 256, c.hitboxRange + "m",
-                    "Maximum distance in blocks/meters to render entity hitboxes.", mx, my);
+                    c.hitboxRange, 4, 256, c.hitboxRange + "m",
+                    "Maximum distance in blocks to render hitboxes & hitbox animations (try 8m for combat lock-on!).", mx, my);
+            y += cardH + 8;
+        }
+
+        if (matchesFilter(filter, "visuals hitbox animation aura ring spiral helix halo brackets vortex ragebait chroma color")) {
+            int cardH = 288;
+            drawCard(x, y, w, cardH, "Hitbox Animations (Ragebait Aura)");
+            int iy = y + 24;
+            c.hitboxAnimEnabled = drawToggleRow(x + 10, iy, w - 20, "Hitbox Animation", c.hitboxAnimEnabled, true,
+                    "Spins animated 3D rings, spirals, or lock-on brackets around targets within Hitbox Render Range (100% visual).", mx, my);
+            iy += 22;
+            String[] styles = {"Target Ring", "Orbiting Halo", "Double Helix", "Lock Brackets", "Vortex Rings"};
+            if (drawCycleRow(x + 10, iy, w - 20, "Animation Style", styles[c.hitboxAnimStyle],
+                    "Switch between Target Ring (up/down sweep), Orbiting Halo, Double Helix spiral, Lock-On Brackets, or Vortex Rings.", mx, my)) {
+                c.hitboxAnimStyle = (c.hitboxAnimStyle + 1) % 5;
+                HitJumpConfig.save();
+            }
+            iy += 22;
+            c.hitboxAnimSpeed = drawSliderRow(404, x + 10, iy, w - 20, "Animation Speed",
+                    c.hitboxAnimSpeed, 25, 300, String.format("%.2fx", c.hitboxAnimSpeed / 100.0F),
+                    "Controls how fast the ring spins or sweeps up and down.", mx, my);
+            iy += 22;
+            c.hitboxAnimRadiusPad = drawSliderRow(405, x + 10, iy, w - 20, "Ring Radius Pad",
+                    c.hitboxAnimRadiusPad, 0, 40, String.format("+%.2fb", c.hitboxAnimRadiusPad / 100.0F),
+                    "Expands the ring outward around the entity hitbox.", mx, my);
+            iy += 22;
+            c.hitboxAnimLineWidth = drawSliderRow(406, x + 10, iy, w - 20, "Line Thickness",
+                    c.hitboxAnimLineWidth, 10, 50, String.format("%.1fpx", c.hitboxAnimLineWidth / 10.0F),
+                    "Adjusts the stroke thickness of the animated rings and spirals.", mx, my);
+            iy += 22;
+            c.hitboxAnimFadeIn = drawToggleRow(x + 10, iy, w - 20, "Proximity Fade-In", c.hitboxAnimFadeIn, false,
+                    "Smoothly expands and fades the aura in when a player enters your hitbox range.", mx, my);
+            iy += 22;
+            c.hitboxAnimShowSelf = drawToggleRow(x + 10, iy, w - 20, "Preview on Self (F5)", c.hitboxAnimShowSelf, false,
+                    "Shows the hitbox animation around your own character in third-person (F5) for easy tuning.", mx, my);
+            iy += 22;
+            c.hitboxAnimChroma = drawToggleRow(x + 10, iy, w - 20, "Chroma Wave", c.hitboxAnimChroma, false,
+                    "Flows a smooth rainbow wave around the ring instead of using the static color below.", mx, my);
+            iy += 24;
+            c.hitboxAnimColor = drawInlineColorPicker(20, x + 10, iy, w - 20, c.hitboxAnimColor, -1, null, mx, my)[0];
             y += cardH + 8;
         }
 
@@ -498,25 +544,105 @@ public class HitJumpConfigScreen extends Screen {
             y += cardH + 8;
         }
 
-        if (matchesFilter(filter, "visuals nametag nametags wall distance meters blocks background color opacity")) {
-            int cardH = 224;
-            drawCard(x, y, w, cardH, "Wall Nametags & Distance Tag");
+        if (matchesFilter(filter, "visuals particle optimizer sharpness crit crits size scale amount multiplier")) {
+            int cardH = 136;
+            drawCard(x, y, w, cardH, "Particle Optimizer (Sharpness & Crits)");
+            int iy = y + 24;
+            c.particleOptEnabled = drawToggleRow(x + 10, iy, w - 20, "Particle Optimizer", c.particleOptEnabled, true,
+                    "Customize the amount and size of Sharpness and Critical Hit particles on melee hits.", mx, my);
+            iy += 22;
+            c.critParticleAmount = drawSliderRow(407, x + 10, iy, w - 20, "Crit Amount",
+                    c.critParticleAmount, 0, 500, c.critParticleAmount + "%",
+                    "Scales critical hit particle count from 0% (off) up to 500% (5x).", mx, my);
+            iy += 22;
+            c.critParticleScale = drawSliderRow(408, x + 10, iy, w - 20, "Crit Size",
+                    c.critParticleScale, 25, 250, String.format("%.2fx", c.critParticleScale / 100.0F),
+                    "Scales critical hit particle size from 0.25x to 2.50x.", mx, my);
+            iy += 22;
+            c.sharpParticleAmount = drawSliderRow(409, x + 10, iy, w - 20, "Sharpness Amount",
+                    c.sharpParticleAmount, 0, 500, c.sharpParticleAmount + "%",
+                    "Scales Sharpness/enchant hit particle count from 0% (off) up to 500% (5x).", mx, my);
+            iy += 22;
+            c.sharpParticleScale = drawSliderRow(410, x + 10, iy, w - 20, "Sharpness Size",
+                    c.sharpParticleScale, 25, 250, String.format("%.2fx", c.sharpParticleScale / 100.0F),
+                    "Scales Sharpness/enchant hit particle size from 0.25x to 2.50x.", mx, my);
+            y += cardH + 8;
+        }
+
+        if (matchesFilter(filter, "visuals time changer weather sky day night sunset noon rain thunder clear")) {
+            int cardH = 114;
+            drawCard(x, y, w, cardH, "Time & Weather Changer");
+            int iy = y + 24;
+            c.timeChangerEnabled = drawToggleRow(x + 10, iy, w - 20, "Client Time Changer", c.timeChangerEnabled, true,
+                    "Locks the skybox to your preferred time of day client-side regardless of server time.", mx, my);
+            iy += 22;
+            String presetLabel = formatTimePreset(c.customTimeTicks);
+            if (drawCycleRow(x + 10, iy, w - 20, "Time Preset", presetLabel,
+                    "Quickly cycle between Dawn (1000), Noon (6000), Sunset (12500), and Midnight (18000).", mx, my)) {
+                c.customTimeTicks = nextTimePreset(c.customTimeTicks);
+                HitJumpConfig.save();
+            }
+            iy += 22;
+            c.customTimeTicks = drawSliderRow(411, x + 10, iy, w - 20, "Exact Time",
+                    c.customTimeTicks, 0, 24000, c.customTimeTicks + "t",
+                    "Fine-tune the exact sky time in ticks (0-24000).", mx, my);
+            iy += 22;
+            String[] weathers = {"Server Default", "Clear", "Rain", "Thunder"};
+            if (drawCycleRow(x + 10, iy, w - 20, "Weather Changer", weathers[c.weatherMode],
+                    "Override local weather to Clear, Rain, or Thunder without affecting the server.", mx, my)) {
+                c.weatherMode = (c.weatherMode + 1) % 4;
+                HitJumpConfig.save();
+            }
+            y += cardH + 8;
+        }
+
+        if (matchesFilter(filter, "visuals companion pets black baby bunny rabbit small dragon follower")) {
+            int cardH = 136;
+            drawCard(x, y, w, cardH, "Companion Pets (Client-Side)");
+            int iy = y + 24;
+            c.petBunnyEnabled = drawToggleRow(x + 10, iy, w - 20, "Black Baby Bunny", c.petBunnyEnabled, true,
+                    "Spawns a client-side black baby bunny that hops behind you everywhere (only visible to you).", mx, my);
+            iy += 22;
+            c.petBunnyScale = drawSliderRow(412, x + 10, iy, w - 20, "Bunny Size",
+                    c.petBunnyScale, 50, 200, c.petBunnyScale + "%",
+                    "Resizes your baby bunny companion from 50% to 200%.", mx, my);
+            iy += 22;
+            c.petDragonEnabled = drawToggleRow(x + 10, iy, w - 20, "Small Flapping Dragon", c.petDragonEnabled, true,
+                    "Spawns a miniature flapping Ender-style dragon that flies beside your shoulder everywhere.", mx, my);
+            iy += 22;
+            c.petDragonScale = drawSliderRow(413, x + 10, iy, w - 20, "Dragon Size",
+                    c.petDragonScale, 50, 200, c.petDragonScale + "%",
+                    "Resizes your flying dragon companion from 50% to 200%.", mx, my);
+            iy += 22;
+            c.petsShowFirstPerson = drawToggleRow(x + 10, iy, w - 20, "Visible in First-Person", c.petsShowFirstPerson, false,
+                    "Turn OFF if you only want to see your pets in third-person (F5).", mx, my);
+            y += cardH + 8;
+        }
+
+        if (matchesFilter(filter, "visuals nametag nametags double override vanilla filter holograms armorstand background color opacity")) {
+            int cardH = 246;
+            drawCard(x, y, w, cardH, "Wall Nametags & Entity Filter");
             int iy = y + 24;
             c.wallNametagsEnabled = drawToggleRow(x + 10, iy, w - 20, "Through-Wall Nametags", c.wallNametagsEnabled, true,
-                    "Shows player and custom-named mob tags cleanly through walls and mountains.", mx, my);
+                    "Draws crisp nametags visible through walls and terrain.", mx, my);
+            iy += 22;
+            c.overrideVanillaNametags = drawToggleRow(x + 10, iy, w - 20, "Override Vanilla Names", c.overrideVanillaNametags, false,
+                    "Hides Minecraft's duplicate default nametag layer so only your custom nametag appears.", mx, my);
+            iy += 22;
+            String ntFilter = (c.nametagTargetMode == 1) ? "Players Only"
+                    : (c.nametagTargetMode == 2 ? "All Entities" : "Players & Mobs");
+            if (drawCycleRow(x + 10, iy, w - 20, "Nametag Entity Filter", ntFilter,
+                    "Controls which entities get custom nametags and distance tags (Players Only hides mobs).", mx, my)) {
+                c.nametagTargetMode = (c.nametagTargetMode + 1) % 3;
+                HitJumpConfig.save();
+            }
+            iy += 22;
+            c.nametagIgnoreHolograms = drawToggleRow(x + 10, iy, w - 20, "Ignore Holograms", c.nametagIgnoreHolograms, false,
+                    "Skips ArmorStand holograms (like Bedwars shop/generator text) from through-wall tags.", mx, my);
             iy += 22;
             c.nametagRange = drawSliderRow(402, x + 10, iy, w - 20, "Nametag Render Range",
-                    c.nametagRange, 16, 256, c.nametagRange + "m",
-                    "Maximum distance to display through-wall nametags, distance tags, and TNT timers.", mx, my);
-            iy += 22;
-            c.showDistanceTag = drawToggleRow(x + 10, iy, w - 20, "Distance Above Nametag", c.showDistanceTag, true,
-                    "Displays live distance right above each entity's nametag so you can judge depth through walls.", mx, my);
-            iy += 22;
-            if (drawCycleRow(x + 10, iy, w - 20, "Distance Unit",
-                    c.distanceUnitBlocks ? "B (Blocks)" : "M (Meters)",
-                    "Switch the distance suffix between M (Meters) and B (Blocks).", mx, my)) {
-                c.distanceUnitBlocks = !c.distanceUnitBlocks;
-            }
+                    c.nametagRange, 8, 256, c.nametagRange + "m",
+                    "Maximum distance to render through-wall nametags and TNT timers.", mx, my);
             iy += 24;
             int[] tagCol = drawInlineColorPicker(1, x + 10, iy, w - 20, c.nametagBgColor, c.nametagBgOpacity, "Thewier", mx, my);
             c.nametagBgColor = tagCol[0];
@@ -524,12 +650,46 @@ public class HitJumpConfigScreen extends Screen {
             y += cardH + 8;
         }
 
-        if (matchesFilter(filter, "visuals armor enchantment info protection tnt fuse countdown timer overlay")) {
-            int cardH = 70;
-            drawCard(x, y, w, cardH, "Combat Info Overlays");
+        if (matchesFilter(filter, "visuals distance standalone meters blocks range offset padding")) {
+            int cardH = 114;
+            drawCard(x, y, w, cardH, "Standalone Player Distance Tag");
             int iy = y + 24;
-            c.armorEnchantInfoEnabled = drawToggleRow(x + 10, iy, w - 20, "Armor Enchantment Info", c.armorEnchantInfoEnabled, true,
-                    "Shows equipped armor protection/enchant levels (e.g. P4) on players, mobs, and armor stands.", mx, my);
+            c.showDistanceTag = drawToggleRow(x + 10, iy, w - 20, "Player Distance Tag", c.showDistanceTag, true,
+                    "Independent distance readout above entities—works even when Through-Wall Nametags are OFF.", mx, my);
+            iy += 22;
+            c.distanceRange = drawSliderRow(414, x + 10, iy, w - 20, "Distance Range",
+                    c.distanceRange, 8, 256, c.distanceRange + "m",
+                    "Maximum distance at which the standalone distance tag renders.", mx, my);
+            iy += 22;
+            c.distanceOffsetY = drawSliderRow(415, x + 10, iy, w - 20, "Vertical Padding",
+                    c.distanceOffsetY, -24, 24, (c.distanceOffsetY >= 0 ? "+" : "") + c.distanceOffsetY + "px",
+                    "Nudges the distance tag higher (+px) or lower (-px) relative to the entity's name.", mx, my);
+            iy += 22;
+            if (drawCycleRow(x + 10, iy, w - 20, "Distance Unit",
+                    c.distanceUnitBlocks ? "B (Blocks)" : "M (Meters)",
+                    "Switch the distance suffix between M (Meters) and B (Blocks).", mx, my)) {
+                c.distanceUnitBlocks = !c.distanceUnitBlocks;
+            }
+            y += cardH + 8;
+        }
+
+        if (matchesFilter(filter, "visuals armor weapon sharpness enchantment info protection range padding tnt fuse countdown timer")) {
+            int cardH = 136;
+            drawCard(x, y, w, cardH, "Enchantment Info & TNT Timer");
+            int iy = y + 24;
+            c.armorEnchantInfoEnabled = drawToggleRow(x + 10, iy, w - 20, "Enchantment Info", c.armorEnchantInfoEnabled, true,
+                    "Shows equipped armor protection (e.g. P2) and held weapon enchants above nearby players.", mx, my);
+            iy += 22;
+            c.enchantShowWeapon = drawToggleRow(x + 10, iy, w - 20, "Show Held Sharpness", c.enchantShowWeapon, false,
+                    "Adds held sword/bow enchants (S1-S5, KB, FA, Power) next to armor levels.", mx, my);
+            iy += 22;
+            c.enchantRange = drawSliderRow(416, x + 10, iy, w - 20, "Enchant Render Range",
+                    c.enchantRange, 4, 128, c.enchantRange + "m",
+                    "Controls how far away enchantment info stays visible.", mx, my);
+            iy += 22;
+            c.enchantOffsetY = drawSliderRow(417, x + 10, iy, w - 20, "Enchant Vertical Pad",
+                    c.enchantOffsetY, -24, 24, (c.enchantOffsetY >= 0 ? "+" : "") + c.enchantOffsetY + "px",
+                    "Moves enchantment info higher (+px) or closer/below (-px) relative to the player name.", mx, my);
             iy += 22;
             c.tntTimerEnabled = drawToggleRow(x + 10, iy, w - 20, "TNT Fuse Countdown Tag", c.tntTimerEnabled, true,
                     "Displays a live color-coded countdown timer directly above ignited TNT.", mx, my);
@@ -592,7 +752,6 @@ public class HitJumpConfigScreen extends Screen {
     }
 
     private int renderHudTab(final HitJumpConfig c, int x, int y, int w, int mx, int my, String filter) {
-        // Click-and-Drag HUD Layout Editor launcher
         if (matchesFilter(filter, "hud layout editor drag move resize position location screen")) {
             int cardH = 54;
             drawCard(x, y, w, cardH, "HUD Layout Editor");
@@ -609,7 +768,6 @@ public class HitJumpConfigScreen extends Screen {
             y += cardH + 8;
         }
 
-        // Bedrock Paper Doll (Mini-Player)
         if (matchesFilter(filter, "hud paper doll mini player bedrock skin cape animation sneaking sprinting")) {
             int cardH = 92;
             drawCard(x, y, w, cardH, "Bedrock Mini-Player (Paper Doll)");
@@ -630,7 +788,6 @@ public class HitJumpConfigScreen extends Screen {
             y += cardH + 8;
         }
 
-        // FPS HUD
         if (matchesFilter(filter, "hud fps frames counter color chroma scale background opacity")) {
             y = renderHudWidgetCard(0, "FPS Counter", x, y, w, mx, my,
                     c.fpsHudEnabled, c.fpsScale, c.fpsChroma, c.fpsColor, c.fpsBgColor, c.fpsBgOpacity,
@@ -643,7 +800,6 @@ public class HitJumpConfigScreen extends Screen {
                     });
         }
 
-        // CPS HUD
         if (matchesFilter(filter, "hud cps clicks per second lmb rmb left right mouse color chroma scale")) {
             y = renderHudWidgetCard(1, "CPS Counter", x, y, w, mx, my,
                     c.cpsHudEnabled, c.cpsScale, c.cpsChroma, c.cpsColor, c.cpsBgColor, c.cpsBgOpacity,
@@ -666,17 +822,22 @@ public class HitJumpConfigScreen extends Screen {
                     });
         }
 
-        // Keystrokes HUD
-        if (matchesFilter(filter, "hud keystrokes wasd lmb rmb spacebar cps color chroma scale")) {
-            y = renderHudWidgetCard(2, "Keystrokes", x, y, w, mx, my,
+        if (matchesFilter(filter, "hud keystrokes wasd lmb rmb spacebar split pieces separate modular cps color chroma scale")) {
+            y = renderHudWidgetCard(2, "Keystrokes (Modular)", x, y, w, mx, my,
                     c.keystrokesEnabled, c.keystrokesScale, c.keystrokesChroma, c.keystrokesColor, c.keystrokesBgColor, c.keystrokesBgOpacity,
-                    "Displays live WASD, LMB, RMB, and Spacebar highlights on your HUD.", 44,
+                    "Toggle WASD, LMB/RMB, and Spacebar individually—or split them into separate draggable pieces.", 110,
                     new Runnable() {
                         public void run() {
-                            c.keystrokesShowCps = drawToggleRow(extraX, extraY, extraW, "Show CPS on LMB/RMB", c.keystrokesShowCps, false,
+                            c.keystrokesShowWasd = drawToggleRow(extraX, extraY, extraW, "Show W A S D", c.keystrokesShowWasd, false,
+                                    "Shows the W, A, S, D movement keys (turn Mouse & Space OFF for pure WASD-only keystrokes).", extraMx, extraMy);
+                            c.keystrokesShowMouse = drawToggleRow(extraX, extraY + 22, extraW, "Show LMB / RMB", c.keystrokesShowMouse, false,
+                                    "Shows the Left and Right Mouse button boxes.", extraMx, extraMy);
+                            c.keystrokesShowCps = drawToggleRow(extraX, extraY + 44, extraW, "Show CPS on LMB/RMB", c.keystrokesShowCps, false,
                                     "Displays live left and right click CPS inside the LMB and RMB key boxes.", extraMx, extraMy);
-                            c.keystrokesShowSpace = drawToggleRow(extraX, extraY + 22, extraW, "Show Spacebar", c.keystrokesShowSpace, false,
-                                    "Includes a Spacebar bar below the mouse buttons.", extraMx, extraMy);
+                            c.keystrokesShowSpace = drawToggleRow(extraX, extraY + 66, extraW, "Show Spacebar", c.keystrokesShowSpace, false,
+                                    "Shows the Spacebar box.", extraMx, extraMy);
+                            c.keystrokesSplitPieces = drawToggleRow(extraX, extraY + 88, extraW, "Separate Draggable Pieces", c.keystrokesSplitPieces, false,
+                                    "Splits WASD, LMB/RMB, and Spacebar into 3 independent pieces inside Edit HUD Layout.", extraMx, extraMy);
                         }
                     },
                     new HudWidgetConsumer() {
@@ -687,7 +848,6 @@ public class HitJumpConfigScreen extends Screen {
                     });
         }
 
-        // Bedwars Strategy Advisor
         if (matchesFilter(filter, "hud bedwars advisor tips strategy chat parser bed destroyed threat rotation")) {
             y = renderHudWidgetCard(3, "Bedwars Strategy Advisor", x, y, w, mx, my,
                     c.bedwarsTipsEnabled, c.bedwarsTipsScale, c.bedwarsTipsChroma, c.bedwarsTipsColor, c.bedwarsTipsBgColor, c.bedwarsTipsBgOpacity,
@@ -706,7 +866,6 @@ public class HitJumpConfigScreen extends Screen {
                     });
         }
 
-        // Custom Scoreboard (Sidebar)
         if (matchesFilter(filter, "hud scoreboard sidebar numbers color chroma scale background opacity")) {
             y = renderHudWidgetCard(4, "Custom Scoreboard (Sidebar)", x, y, w, mx, my,
                     c.scoreboardHudEnabled, c.scoreboardScale, c.scoreboardChroma, c.scoreboardColor, c.scoreboardBgColor, c.scoreboardBgOpacity,
@@ -725,7 +884,6 @@ public class HitJumpConfigScreen extends Screen {
                     });
         }
 
-        // Custom Chat Box
         if (matchesFilter(filter, "hud chat box background opacity transparent color chroma scale lines")) {
             y = renderHudWidgetCard(5, "Custom Chat Box", x, y, w, mx, my,
                     c.chatHudEnabled, c.chatHudScale, c.chatHudChroma, c.chatHudColor, c.chatHudBgColor, c.chatHudBgOpacity,
@@ -745,7 +903,6 @@ public class HitJumpConfigScreen extends Screen {
                     });
         }
 
-        // Custom Tab List
         if (matchesFilter(filter, "hud tab player list overlay color chroma scale background opacity")) {
             y = renderHudWidgetCard(6, "Custom Tab List", x, y, w, mx, my,
                     c.tabHudEnabled, c.tabHudScale, c.tabHudChroma, c.tabHudColor, c.tabHudBgColor, c.tabHudBgOpacity,
@@ -758,7 +915,6 @@ public class HitJumpConfigScreen extends Screen {
                     });
         }
 
-        // Parody Corner HUD cards
         if (matchesFilter(filter, "hud parody corner arraylist text position padding scale sort width")) {
             int cardH = 158;
             drawCard(x, y, w, cardH, "Parody HUD Layout & Placement");
@@ -893,7 +1049,6 @@ public class HitJumpConfigScreen extends Screen {
         return y;
     }
 
-    // Shared helper fields for extra rows inside HUD widget cards
     private int extraX, extraY, extraW, extraMx, extraMy;
 
     private int renderHudWidgetCard(
@@ -1021,7 +1176,7 @@ public class HitJumpConfigScreen extends Screen {
             }
             iy += 22;
             drawBindRow(1, x + 10, iy, w - 20, "Menu Key", c.menuKeyCode,
-                    "Primary key used to open Skill Issue+ v5.0 | Main menu.", mx, my);
+                    "Primary key used to open Skill Issue+ v6.0 | Main menu.", mx, my);
             iy += 22;
             drawBindRow(2, x + 10, iy, w - 20, "Modifier Key (Combo)", c.menuModifierKey,
                     "Key to hold alongside Menu Key when Trigger Mode is set to Modifier + Key.", mx, my);
@@ -1052,6 +1207,20 @@ public class HitJumpConfigScreen extends Screen {
             y += cardH + 8;
         }
         return y;
+    }
+
+    private String formatTimePreset(int ticks) {
+        if (ticks < 3000) return "Dawn";
+        if (ticks < 10000) return "Noon";
+        if (ticks < 15000) return "Sunset";
+        return "Midnight";
+    }
+
+    private int nextTimePreset(int ticks) {
+        if (ticks < 3000) return 6000;
+        if (ticks < 10000) return 12500;
+        if (ticks < 15000) return 18000;
+        return 1000;
     }
 
     // ---------- Reusable UI Primitives ----------
