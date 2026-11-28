@@ -49,7 +49,7 @@ public class SoundMixer {
         Object soundSystem;
         try {
             soundSystem = soundSystemField.get(soundEngineObj);
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
             return;
         }
         if (soundSystem == null) {
@@ -88,7 +88,7 @@ public class SoundMixer {
 
                 applyCategoryMix(soundSystem, channelId, soundId.toLowerCase(), config);
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
 
         cleanupCounter++;
@@ -101,7 +101,7 @@ public class SoundMixer {
                         it.remove();
                     }
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
                 processedChannels.clear();
             }
         }
@@ -179,7 +179,7 @@ public class SoundMixer {
                 if (newPitch > 2.0F) newPitch = 2.0F;
                 sysSetPitchMethod.invoke(soundSystem, channelId, newPitch);
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
     }
 
@@ -197,7 +197,7 @@ public class SoundMixer {
                     }
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
         return null;
     }
@@ -207,7 +207,7 @@ public class SoundMixer {
             try {
                 Object val = playingSoundsField.get(soundEngineObj);
                 return (val instanceof Map) ? (Map<?, ?>) val : null;
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
                 return null;
             }
         }
@@ -228,7 +228,7 @@ public class SoundMixer {
                         }
                     }
                 }
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
         return null;
@@ -245,10 +245,10 @@ public class SoundMixer {
             try {
                 mcField.setAccessible(true);
                 obj = mcField.get(client);
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
                 continue;
             }
-            if (obj == null || obj.getClass().isArray()) continue;
+            if (obj == null || obj.getClass().isArray() || isSkippableClass(obj.getClass())) continue;
 
             if (tryBindSoundEngine(obj)) {
                 return;
@@ -260,10 +260,10 @@ public class SoundMixer {
                 try {
                     subField.setAccessible(true);
                     subObj = subField.get(obj);
-                } catch (Exception ignored) {
+                } catch (Throwable ignored) {
                     continue;
                 }
-                if (subObj == null || subObj.getClass().isArray()) continue;
+                if (subObj == null || subObj.getClass().isArray() || isSkippableClass(subObj.getClass())) continue;
                 if (tryBindSoundEngine(subObj)) {
                     return;
                 }
@@ -271,21 +271,51 @@ public class SoundMixer {
         }
     }
 
+    private static boolean isSkippableClass(Class<?> cls) {
+        if (cls == null) {
+            return true;
+        }
+        String name = cls.getName();
+        return name.startsWith("java.")
+                || name.startsWith("javax.")
+                || name.startsWith("jdk.")
+                || name.startsWith("sun.")
+                || name.startsWith("com.google.")
+                || name.startsWith("org.apache.")
+                || name.startsWith("io.netty.")
+                || name.startsWith("it.unimi.")
+                || name.startsWith("org.lwjgl.")
+                || name.startsWith("org.slf4j.");
+    }
+
     private static boolean tryBindSoundEngine(Object candidate) {
+        if (candidate == null || isSkippableClass(candidate.getClass())) {
+            return false;
+        }
+
         Field foundSys = null;
         List<Field> maps = new ArrayList<Field>();
 
         Class<?> cls = candidate.getClass();
-        while (cls != null && cls != Object.class) {
-            for (Field f : cls.getDeclaredFields()) {
+        while (cls != null && cls != Object.class && !isSkippableClass(cls)) {
+            Field[] declared;
+            try {
+                declared = cls.getDeclaredFields();
+            } catch (Throwable ignored) {
+                break;
+            }
+            for (Field f : declared) {
                 if (Modifier.isStatic(f.getModifiers())) continue;
                 Class<?> ft = f.getType();
-                if (isPaulscodeSoundSystem(ft)) {
-                    f.setAccessible(true);
-                    foundSys = f;
-                } else if (Map.class.isAssignableFrom(ft)) {
-                    f.setAccessible(true);
-                    maps.add(f);
+                try {
+                    if (isPaulscodeSoundSystem(ft)) {
+                        f.setAccessible(true);
+                        foundSys = f;
+                    } else if (Map.class.isAssignableFrom(ft)) {
+                        f.setAccessible(true);
+                        maps.add(f);
+                    }
+                } catch (Throwable ignored) {
                 }
             }
             cls = cls.getSuperclass();
@@ -322,7 +352,7 @@ public class SoundMixer {
             sysGetPitchMethod = sysClass.getMethod("getPitch", String.class);
             sysSetPitchMethod = sysClass.getMethod("setPitch", String.class, float.class);
             sysStopMethod = sysClass.getMethod("stop", String.class);
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
     }
 }
