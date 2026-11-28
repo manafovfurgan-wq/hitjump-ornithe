@@ -13,6 +13,9 @@ import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 public class HitJumpConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -22,6 +25,21 @@ public class HitJumpConfig {
             .toFile();
 
     private static HitJumpConfig instance = new HitJumpConfig();
+
+    public static class ParodyLine {
+        public String text;
+        public boolean enabled;
+
+        public ParodyLine() {
+            this.text = "";
+            this.enabled = true;
+        }
+
+        public ParodyLine(String text, boolean enabled) {
+            this.text = text;
+            this.enabled = enabled;
+        }
+    }
 
     // Combat: HitJump
     public boolean enabled = true;
@@ -60,7 +78,7 @@ public class HitJumpConfig {
     public int hitboxRange = 64;
 
     public boolean invisHitboxEnabled = true;
-    public int invisHitboxColor = 0xFF2626; // Red by default
+    public int invisHitboxColor = 0xFF2626;
 
     public boolean wallNametagsEnabled = true;
     public int nametagRange = 128;
@@ -85,6 +103,22 @@ public class HitJumpConfig {
     public boolean blockhitAnimEnabled = true;
     public boolean smoothSneakEnabled = true;
     public boolean headFixEnabled = true;
+
+    // HUD: Parody Corner List
+    public boolean parodyHudEnabled = true;
+    public int parodyCorner = 1; // 0 = Top-Left, 1 = Top-Right, 2 = Bottom-Left, 3 = Bottom-Right
+    public boolean parodySortByWidth = true;
+    public int parodyOffsetX = 6;
+    public int parodyOffsetY = 6;
+    public int parodyScale = 100; // 50..200 (0.50x..2.00x)
+    public int parodyTextColor = 0xFFFFFF;
+    public boolean parodyTextShadow = true;
+    public boolean parodyShowHeader = true;
+    public String parodyHeaderText = "Tomato Cream";
+    public boolean parodyShowBackground = true;
+    public int parodyBgOpacity = 35;
+    public boolean parodyChromaWave = false;
+    public List<ParodyLine> parodyLines = createDefaultParodyLines();
 
     // Audio: Sound Mixer (Volume: 0..200%, Pitch: 50..200 -> 0.50x..2.00x)
     public boolean soundMixerEnabled = true;
@@ -123,6 +157,17 @@ public class HitJumpConfig {
     public int menuKeyCode = Keyboard.KEY_H;
     public int menuTriggerMode = 0; // 0 = Double-Tap, 1 = Modifier + Key, 2 = Single Press
     public int menuModifierKey = Keyboard.KEY_LCONTROL;
+
+    public static List<ParodyLine> createDefaultParodyLines() {
+        List<ParodyLine> list = new ArrayList<ParodyLine>();
+        list.add(new ParodyLine("SkillToggled", true));
+        list.add(new ParodyLine("WorseHitreg", true));
+        list.add(new ParodyLine("UnsafeWalk", true));
+        list.add(new ParodyLine("RealLag", true));
+        list.add(new ParodyLine("SlowPlace Blatant", true));
+        list.add(new ParodyLine("Scaffold ChaCha Mode", true));
+        return list;
+    }
 
     public static HitJumpConfig getInstance() {
         return instance;
@@ -214,6 +259,21 @@ public class HitJumpConfig {
         this.smoothSneakEnabled = true;
         this.headFixEnabled = true;
 
+        this.parodyHudEnabled = true;
+        this.parodyCorner = 1;
+        this.parodySortByWidth = true;
+        this.parodyOffsetX = 6;
+        this.parodyOffsetY = 6;
+        this.parodyScale = 100;
+        this.parodyTextColor = 0xFFFFFF;
+        this.parodyTextShadow = true;
+        this.parodyShowHeader = true;
+        this.parodyHeaderText = "Tomato Cream";
+        this.parodyShowBackground = true;
+        this.parodyBgOpacity = 35;
+        this.parodyChromaWave = false;
+        this.parodyLines = createDefaultParodyLines();
+
         this.soundMixerEnabled = true;
 
         this.soundHitEnabled = true;
@@ -271,6 +331,27 @@ public class HitJumpConfig {
 
         customHitColor &= 0xFFFFFF;
         customHitOpacity = clamp(customHitOpacity, 0, 100);
+
+        parodyCorner = clamp(parodyCorner, 0, 3);
+        parodyOffsetX = clamp(parodyOffsetX, 0, 150);
+        parodyOffsetY = clamp(parodyOffsetY, 0, 150);
+        parodyScale = clamp(parodyScale, 50, 200);
+        parodyTextColor &= 0xFFFFFF;
+        parodyBgOpacity = clamp(parodyBgOpacity, 0, 100);
+        if (parodyHeaderText == null) {
+            parodyHeaderText = "Tomato Cream";
+        }
+        if (parodyLines == null) {
+            parodyLines = createDefaultParodyLines();
+        } else {
+            Iterator<ParodyLine> it = parodyLines.iterator();
+            while (it.hasNext()) {
+                ParodyLine line = it.next();
+                if (line == null || line.text == null) {
+                    it.remove();
+                }
+            }
+        }
 
         soundHitVolume = clamp(soundHitVolume, 0, 200);
         soundHitPitch = clamp(soundHitPitch, 50, 200);
