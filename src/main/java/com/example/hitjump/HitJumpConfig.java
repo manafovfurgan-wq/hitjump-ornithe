@@ -71,8 +71,9 @@ public class HitJumpConfig {
     public int godPlaceDelayTicks = 0;
     public int godPlaceKeyCode = -98;
 
-    // Visuals: Hitboxes, Invis Color, Eye Line, Nametags, Distance, Armor, TNT, Hit Color, Inventory, Parallax
+    // Visuals: Hitboxes, See Through Walls, Invis Color, Eye Line
     public boolean wallHitboxesEnabled = true;
+    public boolean hitboxThroughWalls = true;
     public boolean hitboxEyeLineEnabled = true;
     public int hitboxTargetMode = 0; // 0 = Players & Mobs, 1 = Players Only, 2 = All Entities
     public int hitboxRange = 64;
@@ -80,6 +81,13 @@ public class HitJumpConfig {
     public boolean invisHitboxEnabled = true;
     public int invisHitboxColor = 0xFF2626;
 
+    // Visuals: Custom Block Outline
+    public boolean blockOutlineEnabled = true;
+    public int blockOutlineWidth = 20; // 5..80 -> 0.5px..8.0px
+    public int blockOutlineColor = 0xFFFFFF;
+    public int blockOutlineOpacity = 85; // 0..100%
+
+    // Visuals: Nametags, Distance, Armor, TNT, Hit Color, Inventory, Parallax
     public boolean wallNametagsEnabled = true;
     public int nametagRange = 128;
     public int nametagBgColor = 0x000000;
@@ -229,12 +237,18 @@ public class HitJumpConfig {
         this.godPlaceKeyCode = -98;
 
         this.wallHitboxesEnabled = true;
+        this.hitboxThroughWalls = true;
         this.hitboxEyeLineEnabled = true;
         this.hitboxTargetMode = 0;
         this.hitboxRange = 64;
 
         this.invisHitboxEnabled = true;
         this.invisHitboxColor = 0xFF2626;
+
+        this.blockOutlineEnabled = true;
+        this.blockOutlineWidth = 20;
+        this.blockOutlineColor = 0xFFFFFF;
+        this.blockOutlineOpacity = 85;
 
         this.wallNametagsEnabled = true;
         this.nametagRange = 128;
@@ -326,6 +340,11 @@ public class HitJumpConfig {
         nametagRange = clamp(nametagRange, 16, 256);
 
         invisHitboxColor &= 0xFFFFFF;
+
+        blockOutlineWidth = clamp(blockOutlineWidth, 5, 80);
+        blockOutlineColor &= 0xFFFFFF;
+        blockOutlineOpacity = clamp(blockOutlineOpacity, 0, 100);
+
         nametagBgColor &= 0xFFFFFF;
         nametagBgOpacity = clamp(nametagBgOpacity, 0, 100);
 
